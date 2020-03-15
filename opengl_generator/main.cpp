@@ -209,18 +209,18 @@ void draw(GLFWwindow* window, int shader, int vao, int nrVertices, float cameraI
 }
 
 
-void screenshot() {
-	std::vector<uint8_t> pixels(3 * SCR_WIDTH * SCR_HEIGHT);
-	glReadPixels(0, 0, SCR_WIDTH, SCR_HEIGHT, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+void screenshot(int x, int y, unsigned int w, unsigned int h) {
+	std::vector<uint8_t> pixels(3 * w * h);
+	glReadPixels(x, y, w, h, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
 
-	for(int h = 0; h != SCR_HEIGHT/2; ++h) {
-		std::swap_ranges(	pixels.begin() + 3 * SCR_WIDTH * h,
-								pixels.begin() + 3 * SCR_WIDTH * (h+1),
-								pixels.begin() + 3 * SCR_WIDTH * (SCR_HEIGHT-h-1));
+	for(int line = 0; line != h/2; ++line) {
+		std::swap_ranges(	pixels.begin() + 3 * w * line,
+								pixels.begin() + 3 * w * (line+1),
+								pixels.begin() + 3 * w * (h-line-1));
 	}
 
 	std::ofstream screenshotFile{"screenshot.png", std::ios::binary};
-	TinyPngOut{SCR_WIDTH, SCR_HEIGHT, screenshotFile}.write(pixels.data(), SCR_WIDTH * SCR_HEIGHT);
+	TinyPngOut{w, h, screenshotFile}.write(pixels.data(), w * h);
 }
 
 
@@ -239,19 +239,14 @@ int main() {
 
 	draw(window, shader, vao, vertices.size(),
 			5.0f, 0.2f, 0.3f, 0.3f);
-	screenshot();
 
+	screenshot(0, 0, SCR_WIDTH, SCR_HEIGHT);
 
 	while (!glfwWindowShouldClose(window)) {
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		glfwPollEvents();
 	}
 
-
-
-	///////////
-	// FINE
-	///////////
 
 	glDeleteVertexArrays(1, &vao);
 	glDeleteBuffers(1, &vbo);
