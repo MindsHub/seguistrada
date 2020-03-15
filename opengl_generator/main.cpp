@@ -182,6 +182,7 @@ void draw(GLFWwindow* window, float screenRatio, int shader, int vao, int nrVert
 	int viewUniformLocation = glGetUniformLocation(shader, "view");
 	int projectionUniformLocation = glGetUniformLocation(shader, "projection");
 
+	glEnable(GL_DEPTH_TEST);
 	glClearColor(r, g, b, 1.0f); // il colore di background
 	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // disegnare solo il perimetro dei triangoli
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // also clear the depth buffer now!
