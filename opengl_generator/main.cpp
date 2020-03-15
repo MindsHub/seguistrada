@@ -16,6 +16,8 @@ g++ -std=c++17 -Iglad/include -ITinyPngOut/include main.cpp glad/src/glad.c Tiny
 #include <vector>
 #include <functional>
 #include <numeric>
+#include <chrono>
+#include <thread>
 
 // settings
 constexpr int SCR_WIDTH = 1600;
@@ -253,6 +255,7 @@ int main() {
 
 
 	while (!glfwWindowShouldClose(window)) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		glfwPollEvents();
 	}
 
