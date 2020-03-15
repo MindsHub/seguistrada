@@ -220,35 +220,33 @@ void screenshot(int x, int y, unsigned int w, unsigned int h) {
 }
 
 
-int main() {
-	constexpr unsigned int width = 1600;
-	constexpr unsigned int height = 1600;
-
+void show(unsigned int width, unsigned int height, std::vector<float> vertices, float cameraInclination, float r, float g, float b) {
 	GLFWwindow* window = init(width, height);
-	if(window == NULL) return 1;
-
+	if(window == NULL) return;
 
 	int shader = compileShader("vertex_shader.glsl", "fragment_shader.glsl");
-
-	std::vector<float> vertices = getAnnulus(-100, -0.5, 0, 99.9, 100.1, 1000,
-			[]() { return std::tuple{0.5f,0.0f,1.0f}; });
-
 	auto [vbo, vao] = genVboVao(shader, vertices, {{"pos", 3}, {"col", 3}});
 
-
 	draw(window, (float)width/height, shader, vao, vertices.size(),
-			5.0f, 0.2f, 0.3f, 0.3f);
+			cameraInclination, r, g, b);
 
 	screenshot(0, 0, width, height);
+
 
 	while (!glfwWindowShouldClose(window)) {
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		glfwPollEvents();
 	}
 
-
 	glDeleteVertexArrays(1, &vao);
 	glDeleteBuffers(1, &vbo);
 	glfwTerminate();
-	return 0;
+}
+
+
+int main() {
+	std::vector<float> vertices = getAnnulus(-100, -0.5, 0, 99.9, 100.1, 1000,
+			[]() { return std::tuple{0.5f,0.0f,1.0f}; });
+
+	show(1600, 900, vertices, 5.0f, 0.2f, 0.3f, 0.3f);
 }
