@@ -1,5 +1,5 @@
 /*
-g++ -std=c++17 -Iglad/include -ITinyPngOut/include main.cpp glad/src/glad.c TinyPngOut/src/TinyPngOut.cpp -lSOIL -lstdc++fs -lGL -lGLU -lglfw3 -lX11 -lXxf86vm -lXrandr -lpthread -lXi -ldl -lXinerama -lXcursor && ./a.out
+g++ -std=c++17 -O3 -Iglad/include -ITinyPngOut/include main.cpp glad/src/glad.c TinyPngOut/src/TinyPngOut.cpp -lSOIL -lstdc++fs -lGL -lGLU -lglfw3 -lX11 -lXxf86vm -lXrandr -lpthread -lXi -ldl -lXinerama -lXcursor && ./a.out
 */
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -18,6 +18,7 @@ g++ -std=c++17 -Iglad/include -ITinyPngOut/include main.cpp glad/src/glad.c Tiny
 #include <numeric>
 #include <chrono>
 #include <thread>
+#include <random>
 
 
 std::string getFileContent(std::string filename) {
@@ -244,6 +245,7 @@ void show(unsigned int width, unsigned int height, std::vector<float> vertices, 
 	glfwTerminate();
 }
 
+
 std::vector<float> merge(const std::initializer_list<std::vector<float>>& vectors) {
 	std::vector<float> result;
 
@@ -254,15 +256,39 @@ std::vector<float> merge(const std::initializer_list<std::vector<float>>& vector
 	return result;
 }
 
+float randomReal() {
+	static std::random_device rd;
+	static std::mt19937 engine(rd());
+	static std::uniform_real_distribution<> dist(0, 1);
+	return dist(engine);
+}
+
 
 int main() {
-	std::vector<float> v1 = getAnnulus(-100, -0.5, 0, 99.9, 100.1, 1000,
-			[]() { return std::tuple{0.5f,0.0f,1.0f}; });
+	auto tratt = []() {
+		static int counter = 0;
+		++counter;
 
-	std::vector<float> v2 = getAnnulus(-100, -0.4, 0, 99.8, 100.2, 1000,
-			[]() { return std::tuple{1.0f,0.5f,0.0f}; });
+		if ((counter/20)%7 < 4) {
+			return std::tuple{1.0f,1.0f,1.0f};
+		} else {
+			return std::tuple{0.0f,0.0f,0.0f};
+		}
+	};
 
-	std::vector<float> vertices = merge({v1, v2});
+
+	std::vector<float> v0 = getAnnulus(-100, -1.5, 0, 95.4, 95.6, 1000, tratt);
+
+	std::vector<float> v1 = getAnnulus(-100, -1.5, 0, 98.4, 98.6, 1000, tratt);
+
+	std::vector<float> v2 = getAnnulus(-100, -1.5, 0, 101.4, 101.6, 1000, tratt);
+
+	std::vector<float> streets = getAnnulus(-100, -1.501, 0, 95, 102, 1000, []() {
+		float grey = randomReal()/10;
+		return std::tuple{grey,grey,grey};
+	});
+
+	std::vector<float> vertices = merge({v0,v1,v2,streets});
 
 	show(1600, 900, vertices, 5.0f, 0.2f, 0.3f, 0.3f);
 }
