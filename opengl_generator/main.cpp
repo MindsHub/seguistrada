@@ -181,19 +181,31 @@ std::vector<float> getAnnulus(float x0, float y0, float z0, float internalRadius
 	return triangles;
 }
 
-glm::mat4 getViewMatrix(const glm::vec3& position, float yaw, float pitch) {
-	constexpr glm::vec3 worldUp{0.0f, 1.0f, 0.0f};
 
-	glm::vec3 front;
-	front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-	front.y = sin(glm::radians(pitch));
-	front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-	front = glm::normalize(front);
+void draw(GLFWwindow* window, int shader, int vao, int nrVertices, float cameraInclination, float r, float g, float b) {
+	int viewUniformLocation = glGetUniformLocation(shader, "view");
+	int projectionUniformLocation = glGetUniformLocation(shader, "projection");
 
-	glm::vec3 right = glm::normalize(glm::cross(front, worldUp));
-	glm::vec3 up = glm::normalize(glm::cross(right, front));
+	glClearColor(r, g, b, 1.0f); // il colore di background
+	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // disegnare solo il perimetro dei triangoli
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // also clear the depth buffer now!
 
-	return glm::lookAt(position, position + front, up);
+	glUseProgram(shader);
+	glBindVertexArray(vao);
+
+	// make sure to initialize matrix to identity matrix first
+	glm::mat4 view{1.0f};
+	//view = glm::translate(view, glm::vec3{0,0,0});
+	//view = glm::rotate(view, glm::radians(0.0f), glm::vec3{0,    1.0f, 0}); // yaw
+	view = glm::rotate(view, glm::radians(cameraInclination), glm::vec3{1.0f, 0,    0}); // pitch
+	glUniformMatrix4fv(viewUniformLocation, 1, GL_FALSE, &view[0][0]);
+
+	glm::mat4 projection = glm::mat4(1.0f);
+	projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.01f, 100.0f);
+	glUniformMatrix4fv(projectionUniformLocation, 1, GL_FALSE, &projection[0][0]);
+
+	glDrawArrays(GL_TRIANGLES, 0, nrVertices);
+	glfwSwapBuffers(window);
 }
 
 
@@ -220,37 +232,13 @@ int main() {
 	int shader = compileShader("vertex_shader.glsl", "fragment_shader.glsl");
 
 	std::vector<float> vertices = getAnnulus(-100, -0.5, 0, 99.9, 100.1, 1000,
-		[]() { return std::tuple{0.5f,0.0f,1.0f}; });
+			[]() { return std::tuple{0.5f,0.0f,1.0f}; });
 
 	auto [vbo, vao] = genVboVao(shader, vertices, {{"pos", 3}, {"col", 3}});
 
 
-	int viewUniformLocation = glGetUniformLocation(shader, "view");
-	int projectionUniformLocation = glGetUniformLocation(shader, "projection");
-
-
-	glClearColor(0.2f, 0.3f, 0.3f, 1.0f); // il colore di background
-	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // disegnare solo il perimetro dei triangoli
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // also clear the depth buffer now!
-
-	glUseProgram(shader);
-	glBindVertexArray(vao);
-
-	// make sure to initialize matrix to identity matrix first
-	glm::mat4 view{1.0f};
-	//view = glm::translate(view, glm::vec3{0,0,0});
-	//view = glm::rotate(view, glm::radians(0.0f), glm::vec3{0,    1.0f, 0}); // yaw
-	view = glm::rotate(view, glm::radians(5.0f), glm::vec3{1.0f, 0,    0}); // pitch
-	glUniformMatrix4fv(viewUniformLocation, 1, GL_FALSE, &view[0][0]);
-
-	glm::mat4 projection = glm::mat4(1.0f);
-	projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.01f, 100.0f);
-	glUniformMatrix4fv(projectionUniformLocation, 1, GL_FALSE, &projection[0][0]);
-
-	glDrawArrays(GL_TRIANGLES, 0, vertices.size());
-	glfwSwapBuffers(window);
-
-
+	draw(window, shader, vao, vertices.size(),
+			5.0f, 0.2f, 0.3f, 0.3f);
 	screenshot();
 
 
