@@ -243,10 +243,25 @@ void show(unsigned int width, unsigned int height, std::vector<float> vertices, 
 	glfwTerminate();
 }
 
+std::vector<float> merge(const std::initializer_list<std::vector<float>>& vectors) {
+	std::vector<float> result;
+
+	for (auto&& v : vectors) {
+		result.insert(result.end(), v.begin(), v.end());
+	}
+
+	return result;
+}
+
 
 int main() {
-	std::vector<float> vertices = getAnnulus(-100, -0.5, 0, 99.9, 100.1, 1000,
+	std::vector<float> v1 = getAnnulus(-100, -0.5, 0, 99.9, 100.1, 1000,
 			[]() { return std::tuple{0.5f,0.0f,1.0f}; });
+
+	std::vector<float> v2 = getAnnulus(-100, -0.4, 0, 99.8, 100.2, 1000,
+			[]() { return std::tuple{1.0f,0.5f,0.0f}; });
+
+	std::vector<float> vertices = merge({v1, v2});
 
 	show(1600, 900, vertices, 5.0f, 0.2f, 0.3f, 0.3f);
 }
