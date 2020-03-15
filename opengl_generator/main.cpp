@@ -19,10 +19,6 @@ g++ -std=c++17 -Iglad/include -ITinyPngOut/include main.cpp glad/src/glad.c Tiny
 #include <chrono>
 #include <thread>
 
-// settings
-constexpr int SCR_WIDTH = 1600;
-constexpr int SCR_HEIGHT = 900;
-
 
 std::string getFileContent(std::string filename) {
 	std::ifstream file(filename);
@@ -31,7 +27,7 @@ std::string getFileContent(std::string filename) {
 }
 
 
-GLFWwindow* init() {
+GLFWwindow* init(unsigned int w, unsigned int h) {
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -41,7 +37,7 @@ GLFWwindow* init() {
 	#endif
 
 	// glfw window creation
-	GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", NULL, NULL);
+	GLFWwindow* window = glfwCreateWindow(w, h, "LearnOpenGL", NULL, NULL);
 	if (window == NULL)
 	{
 		std::cout << "Failed to create GLFW window" << std::endl;
@@ -182,7 +178,7 @@ std::vector<float> getAnnulus(float x0, float y0, float z0, float internalRadius
 }
 
 
-void draw(GLFWwindow* window, int shader, int vao, int nrVertices, float cameraInclination, float r, float g, float b) {
+void draw(GLFWwindow* window, float screenRatio, int shader, int vao, int nrVertices, float cameraInclination, float r, float g, float b) {
 	int viewUniformLocation = glGetUniformLocation(shader, "view");
 	int projectionUniformLocation = glGetUniformLocation(shader, "projection");
 
@@ -201,7 +197,7 @@ void draw(GLFWwindow* window, int shader, int vao, int nrVertices, float cameraI
 	glUniformMatrix4fv(viewUniformLocation, 1, GL_FALSE, &view[0][0]);
 
 	glm::mat4 projection = glm::mat4(1.0f);
-	projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.01f, 100.0f);
+	projection = glm::perspective(glm::radians(45.0f), screenRatio, 0.01f, 100.0f);
 	glUniformMatrix4fv(projectionUniformLocation, 1, GL_FALSE, &projection[0][0]);
 
 	glDrawArrays(GL_TRIANGLES, 0, nrVertices);
@@ -225,7 +221,10 @@ void screenshot(int x, int y, unsigned int w, unsigned int h) {
 
 
 int main() {
-	GLFWwindow* window = init();
+	constexpr unsigned int width = 1600;
+	constexpr unsigned int height = 1600;
+
+	GLFWwindow* window = init(width, height);
 	if(window == NULL) return 1;
 
 
@@ -237,10 +236,10 @@ int main() {
 	auto [vbo, vao] = genVboVao(shader, vertices, {{"pos", 3}, {"col", 3}});
 
 
-	draw(window, shader, vao, vertices.size(),
+	draw(window, (float)width/height, shader, vao, vertices.size(),
 			5.0f, 0.2f, 0.3f, 0.3f);
 
-	screenshot(0, 0, SCR_WIDTH, SCR_HEIGHT);
+	screenshot(0, 0, width, height);
 
 	while (!glfwWindowShouldClose(window)) {
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
