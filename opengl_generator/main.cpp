@@ -1,5 +1,5 @@
 /*
-g++ -std=c++17 -Iglad/include main.cpp glad/src/glad.c   -lSOIL -lstdc++fs -lGL -lGLU -lglfw3 -lX11 -lXxf86vm -lXrandr -lpthread -lXi -ldl -lXinerama -lXcursor && ./a.out
+g++ -std=c++17 -Iglad/include -ITinyPngOut/include main.cpp glad/src/glad.c TinyPngOut/src/TinyPngOut.cpp -lSOIL -lstdc++fs -lGL -lGLU -lglfw3 -lX11 -lXxf86vm -lXrandr -lpthread -lXi -ldl -lXinerama -lXcursor && ./a.out
 */
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -7,6 +7,8 @@ g++ -std=c++17 -Iglad/include main.cpp glad/src/glad.c   -lSOIL -lstdc++fs -lGL 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+
+#include <TinyPngOut.hpp>
 
 #include <iostream>
 #include <string>
@@ -193,6 +195,21 @@ glm::mat4 getViewMatrix(const glm::vec3& position, float yaw, float pitch) {
 }
 
 
+void screenshot() {
+	std::vector<uint8_t> pixels(3 * SCR_WIDTH * SCR_HEIGHT);
+	glReadPixels(0, 0, SCR_WIDTH, SCR_HEIGHT, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+
+	for(int h = 0; h != SCR_HEIGHT/2; ++h) {
+		std::swap_ranges(	pixels.begin() + 3 * SCR_WIDTH * h,
+								pixels.begin() + 3 * SCR_WIDTH * (h+1),
+								pixels.begin() + 3 * SCR_WIDTH * (SCR_HEIGHT-h-1));
+	}
+
+	std::ofstream screenshotFile{"screenshot.png", std::ios::binary};
+	TinyPngOut{SCR_WIDTH, SCR_HEIGHT, screenshotFile}.write(pixels.data(), SCR_WIDTH * SCR_HEIGHT);
+}
+
+
 int main() {
 	GLFWwindow* window = init();
 	if(window == NULL) return 1;
@@ -206,41 +223,36 @@ int main() {
 	auto [vbo, vao] = genVboVao(shader, vertices, {{"pos", 3}, {"col", 3}});
 
 
-	int timeUniformLocation = glGetUniformLocation(shader, "time");
 	int viewUniformLocation = glGetUniformLocation(shader, "view");
 	int projectionUniformLocation = glGetUniformLocation(shader, "projection");
 
 
-	///////////
-	// LOOP
-	///////////
-
 	glClearColor(0.2f, 0.3f, 0.3f, 1.0f); // il colore di background
 	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // disegnare solo il perimetro dei triangoli
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // also clear the depth buffer now!
+
+	glUseProgram(shader);
+	glBindVertexArray(vao);
+
+	// make sure to initialize matrix to identity matrix first
+	glm::mat4 view{1.0f};
+	//view = glm::translate(view, glm::vec3{0,0,0});
+	//view = glm::rotate(view, glm::radians(0.0f), glm::vec3{0,    1.0f, 0}); // yaw
+	view = glm::rotate(view, glm::radians(5.0f), glm::vec3{1.0f, 0,    0}); // pitch
+	glUniformMatrix4fv(viewUniformLocation, 1, GL_FALSE, &view[0][0]);
+
+	glm::mat4 projection = glm::mat4(1.0f);
+	projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.01f, 100.0f);
+	glUniformMatrix4fv(projectionUniformLocation, 1, GL_FALSE, &projection[0][0]);
+
+	glDrawArrays(GL_TRIANGLES, 0, vertices.size());
+	glfwSwapBuffers(window);
+
+
+	screenshot();
+
 
 	while (!glfwWindowShouldClose(window)) {
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // also clear the depth buffer now!
-
-		glUseProgram(shader);
-		glBindVertexArray(vao);
-
-
-		// make sure to initialize matrix to identity matrix first
-		glm::mat4 view{1.0f};
-		//view = glm::translate(view, glm::vec3{0,0,0});
-		//view = glm::rotate(view, glm::radians(0.0f), glm::vec3{0,    1.0f, 0}); // yaw
-		view = glm::rotate(view, glm::radians(5.0f), glm::vec3{1.0f, 0,    0}); // pitch
-		glUniformMatrix4fv(viewUniformLocation, 1, GL_FALSE, &view[0][0]);
-
-		glm::mat4 projection = glm::mat4(1.0f);
-		projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.01f, 100.0f);
-		glUniformMatrix4fv(projectionUniformLocation, 1, GL_FALSE, &projection[0][0]);
-
-
-		glUniform1f(timeUniformLocation, glfwGetTime());
-		glDrawArrays(GL_TRIANGLES, 0, vertices.size());
-
-		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
 
