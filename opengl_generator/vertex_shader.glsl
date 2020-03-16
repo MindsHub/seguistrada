@@ -2,9 +2,9 @@
 #version 330 core
 
 in vec3 pos;
-in vec3 col;
+in vec4 col;
 
-out vec3 fragCol;
+out vec4 fragCol;
 
 uniform mat4 view;
 uniform mat4 projection;

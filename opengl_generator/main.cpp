@@ -142,7 +142,7 @@ auto genVboVao(unsigned int shader, const std::vector<float>& vertices,
 
 
 std::vector<float> getAnnulus(float x0, float y0, float z0, float internalRadius, float externalRadius, int resolution,
-		const std::function<std::tuple<float,float,float>()>& colorGenerator) {
+		const std::function<std::tuple<float,float,float,float>()>& colorGenerator) {
 	std::vector<float> triangles;
 	triangles.reserve(6*resolution);
 
@@ -154,10 +154,11 @@ std::vector<float> getAnnulus(float x0, float y0, float z0, float internalRadius
 		triangles.push_back(y0);
 		triangles.push_back(z0 +radius*sin(angle));
 
-		auto [r,g,b] = colorGenerator();
+		auto [r,g,b,a] = colorGenerator();
 		triangles.push_back(r);
 		triangles.push_back(g);
 		triangles.push_back(b);
+		triangles.push_back(a);
 	};
 
 	for(int v = 0; v != resolution; ++v) {
@@ -182,6 +183,10 @@ std::vector<float> getAnnulus(float x0, float y0, float z0, float internalRadius
 void draw(GLFWwindow* window, float screenRatio, int shader, int vao, int nrVertices, float cameraInclination, float r, float g, float b) {
 	int viewUniformLocation = glGetUniformLocation(shader, "view");
 	int projectionUniformLocation = glGetUniformLocation(shader, "projection");
+
+	glEnable(GL_BLEND); // transparency
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glDisable(GL_CULL_FACE);
 
 	glEnable(GL_DEPTH_TEST);
 	glClearColor(r, g, b, 1.0f); // il colore di background
@@ -227,7 +232,7 @@ void show(unsigned int width, unsigned int height, std::vector<float> vertices, 
 	if(window == NULL) return;
 
 	int shader = compileShader("vertex_shader.glsl", "fragment_shader.glsl");
-	auto [vbo, vao] = genVboVao(shader, vertices, {{"pos", 3}, {"col", 3}});
+	auto [vbo, vao] = genVboVao(shader, vertices, {{"pos", 3}, {"col", 4}});
 
 	draw(window, (float)width/height, shader, vao, vertices.size(),
 			cameraInclination, r, g, b);
@@ -269,26 +274,23 @@ int main() {
 		static int counter = 0;
 		++counter;
 
-		if ((counter/20)%7 < 4) {
-			return std::tuple{1.0f,1.0f,1.0f};
+		if ((counter/15)%7 < 4) {
+			return std::tuple{1.0f,1.0f,1.0f,1.0f};
 		} else {
-			return std::tuple{0.0f,0.0f,0.0f};
+			return std::tuple{0.0f,0.0f,0.0f,0.0f};
 		}
 	};
 
-
-	std::vector<float> v0 = getAnnulus(-100, -1.5, 0, 95.4, 95.6, 1000, tratt);
-
-	std::vector<float> v1 = getAnnulus(-100, -1.5, 0, 98.4, 98.6, 1000, tratt);
-
-	std::vector<float> v2 = getAnnulus(-100, -1.5, 0, 101.4, 101.6, 1000, tratt);
-
 	std::vector<float> streets = getAnnulus(-100, -1.501, 0, 95, 102, 1000, []() {
 		float grey = randomReal()/10;
-		return std::tuple{grey,grey,grey};
+		return std::tuple{grey,grey,grey,1.0f};
 	});
 
-	std::vector<float> vertices = merge({v0,v1,v2,streets});
+	std::vector<float> v0 = getAnnulus(-100, -1.5, 0,  95.4,  95.6, 1000, tratt);
+	std::vector<float> v1 = getAnnulus(-100, -1.5, 0,  98.4,  98.6, 1000, tratt);
+	std::vector<float> v2 = getAnnulus(-100, -1.5, 0, 101.4, 101.6, 1000, tratt);
+
+	std::vector<float> vertices = merge({streets,v0,v1,v2});
 
 	show(1600, 900, vertices, 5.0f, 0.2f, 0.3f, 0.3f);
 }
