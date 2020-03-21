@@ -180,7 +180,7 @@ std::vector<float> getAnnulus(float x0, float y0, float z0, float internalRadius
 }
 
 
-void draw(GLFWwindow* window, float screenRatio, int shader, int vao, int nrVertices, float cameraInclination, float r, float g, float b) {
+void draw(GLFWwindow* window, float screenRatio, int shader, int vao, int nrVertices, float cameraInclination, float fov, float r, float g, float b) {
 	int viewUniformLocation = glGetUniformLocation(shader, "view");
 	int projectionUniformLocation = glGetUniformLocation(shader, "projection");
 
@@ -204,7 +204,7 @@ void draw(GLFWwindow* window, float screenRatio, int shader, int vao, int nrVert
 	glUniformMatrix4fv(viewUniformLocation, 1, GL_FALSE, &view[0][0]);
 
 	glm::mat4 projection = glm::mat4(1.0f);
-	projection = glm::perspective(glm::radians(45.0f), screenRatio, 0.01f, 100.0f);
+	projection = glm::perspective(glm::radians(fov), screenRatio, 0.01f, 100.0f);
 	glUniformMatrix4fv(projectionUniformLocation, 1, GL_FALSE, &projection[0][0]);
 
 	glDrawArrays(GL_TRIANGLES, 0, nrVertices);
@@ -227,15 +227,19 @@ void screenshot(int x, int y, unsigned int w, unsigned int h) {
 }
 
 
-void show(unsigned int width, unsigned int height, std::vector<float> vertices, float cameraInclination, float r, float g, float b) {
+void show(unsigned int width, unsigned int height, std::vector<float> vertices, float cameraInclination, float fov, float r, float g, float b) {
 	GLFWwindow* window = init(width, height);
 	if(window == NULL) return;
 
 	int shader = compileShader("vertex_shader.glsl", "fragment_shader.glsl");
 	auto [vbo, vao] = genVboVao(shader, vertices, {{"pos", 3}, {"col", 4}});
 
+	// draw twice to prevent buffer swap problems
 	draw(window, (float)width/height, shader, vao, vertices.size(),
-			cameraInclination, r, g, b);
+			cameraInclination, fov, r, g, b);
+	glfwPollEvents();
+	draw(window, (float)width/height, shader, vao, vertices.size(),
+			cameraInclination, fov, r, g, b);
 
 	screenshot(0, 0, width, height);
 
@@ -292,5 +296,5 @@ int main() {
 
 	std::vector<float> vertices = merge({streets,v0,v1,v2});
 
-	show(1600, 900, vertices, 5.0f, 0.2f, 0.3f, 0.3f);
+	show(1600, 900, vertices, 5.0f, 45.0f, 0.2f, 0.3f, 0.3f);
 }
