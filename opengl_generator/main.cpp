@@ -184,6 +184,21 @@ std::vector<float> getAnnulus(float x0, float y0, float z0, float internalRadius
 	return triangles;
 }
 
+std::vector<float> getProjLines(float screenRatio, float cameraInclination, float fovy, const Color& color) {
+	auto [r,g,b,a] = color;
+	float tanLineAngle = (tan(cameraInclination) / tan(fovy/2) + 1) / screenRatio;
+	std::cout<<"Tan line angle = "<<tanLineAngle<<"  -->  line angle = "<<atan(tanLineAngle)<<"\n";
+
+	std::vector<float> result{
+		-1,                                -1, r,g,b,a,
+		2 / tanLineAngle / screenRatio - 1, 1, r,g,b,a,
+		1,                                 -1, r,g,b,a,
+		1 - 2 / tanLineAngle / screenRatio, 1, r,g,b,a,
+	};
+
+	return result;
+}
+
 
 void draw(int shader, int vao, int nrVertices, float screenRatio, float cameraInclination, float fovy) {
 	int viewUniformLocation = glGetUniformLocation(shader, "view");
@@ -314,6 +329,21 @@ int main() {
 	//constexpr float fovy = glm::radians(48.8f); // pi camera v2
 	constexpr Color backgroundColor{0.2f, 0.3f, 0.3f};
 
+	/* To draw triangle representing street to infinity
+	auto [re,g,bl,a] = std::tuple{1.0f, 0.0f, 0.0f, 0.15f};
+	float r = 0.1f;
+	float h = r * (sin(cameraInclination) + cos(cameraInclination) * tan(fovy/2));
+	float b = r * (float)width/height * tan(fovy/2);
+
+	std::vector<float> forwardStreetToInfinity = {
+		b, -h, 0.0f, re,g,bl,a,
+		0, -h, 0.0f, re,g,bl,a,
+		b, -h, -10000.0f, re,g,bl,a,
+		-b, -h, 0.0f, re,g,bl,a,
+		0, -h, 0.0f, re,g,bl,a,
+		-b, -h, -10000.0f, re,g,bl,a,
+	};*/
+
 	auto tratt = []() {
 		static int counter = 0;
 		++counter;
@@ -335,6 +365,7 @@ int main() {
 	std::vector<float> v2 = getAnnulus(-100, -1.5, 0, 101.4, 101.6, 1000, tratt);
 
 	std::vector<float> vertices = merge({streets,v0,v1,v2});
+	std::vector<float> lineVertices = getProjLines((float)width/height, cameraInclination, fovy, {1.0, 0.0, 0.0});
 
-	show(width, height, cameraInclination, fovy, backgroundColor, vertices, {});
+	show(width, height, cameraInclination, fovy, backgroundColor, vertices, lineVertices);
 }
