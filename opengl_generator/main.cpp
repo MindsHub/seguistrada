@@ -21,6 +21,11 @@ g++ -std=c++17 -O3 -Iglad/include -ITinyPngOut/include main.cpp glad/src/glad.c 
 #include <random>
 
 
+struct Color {
+	float r, g, b, a = 1.0f;
+};
+
+
 std::string getFileContent(std::string filename) {
 	std::ifstream file(filename);
 	return std::string(std::istreambuf_iterator<char>(file),
@@ -142,7 +147,7 @@ auto genVboVao(unsigned int shader, const std::vector<float>& vertices,
 
 
 std::vector<float> getAnnulus(float x0, float y0, float z0, float internalRadius, float externalRadius, int resolution,
-		const std::function<std::tuple<float,float,float,float>()>& colorGenerator) {
+		const std::function<Color()>& colorGenerator) {
 	std::vector<float> triangles;
 	triangles.reserve(6*resolution);
 
@@ -152,7 +157,7 @@ std::vector<float> getAnnulus(float x0, float y0, float z0, float internalRadius
 	auto addPoint = [&triangles, &x0, &y0, &z0, &colorGenerator](float radius, float angle) {
 		triangles.push_back(x0 + radius*cos(angle));
 		triangles.push_back(y0);
-		triangles.push_back(z0 +radius*sin(angle));
+		triangles.push_back(z0 + radius*sin(angle));
 
 		auto [r,g,b,a] = colorGenerator();
 		triangles.push_back(r);
@@ -180,18 +185,13 @@ std::vector<float> getAnnulus(float x0, float y0, float z0, float internalRadius
 }
 
 
-void draw(GLFWwindow* window, float screenRatio, int shader, int vao, int nrVertices, float cameraInclination, float fov, float r, float g, float b) {
+void draw(int shader, int vao, int nrVertices, float screenRatio, float cameraInclination, float fovy) {
 	int viewUniformLocation = glGetUniformLocation(shader, "view");
 	int projectionUniformLocation = glGetUniformLocation(shader, "projection");
 
 	glEnable(GL_BLEND); // transparency
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glDisable(GL_CULL_FACE);
-
 	glEnable(GL_DEPTH_TEST);
-	glClearColor(r, g, b, 1.0f); // il colore di background
-	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // disegnare solo il perimetro dei triangoli
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // also clear the depth buffer now!
 
 	glUseProgram(shader);
 	glBindVertexArray(vao);
@@ -200,15 +200,37 @@ void draw(GLFWwindow* window, float screenRatio, int shader, int vao, int nrVert
 	glm::mat4 view{1.0f};
 	//view = glm::translate(view, glm::vec3{0,0,0});
 	//view = glm::rotate(view, glm::radians(0.0f), glm::vec3{0,    1.0f, 0}); // yaw
-	view = glm::rotate(view, glm::radians(cameraInclination), glm::vec3{1.0f, 0,    0}); // pitch
+	view = glm::rotate(view, cameraInclination, glm::vec3{1.0f, 0,    0}); // pitch
 	glUniformMatrix4fv(viewUniformLocation, 1, GL_FALSE, &view[0][0]);
 
 	glm::mat4 projection = glm::mat4(1.0f);
-	projection = glm::perspective(glm::radians(fov), screenRatio, 0.01f, 100.0f);
+	projection = glm::perspective(fovy, screenRatio, 0.01f, 100.0f);
 	glUniformMatrix4fv(projectionUniformLocation, 1, GL_FALSE, &projection[0][0]);
 
 	glDrawArrays(GL_TRIANGLES, 0, nrVertices);
+}
+
+void drawLines(GLFWwindow* window, int shader, int vao, int nrVertices) {
+	glEnable(GL_BLEND); // transparency
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glDisable(GL_DEPTH_TEST); // no depth testing (!)
+
+	glUseProgram(shader);
+	glBindVertexArray(vao);
+	glDrawArrays(GL_LINES, 0, nrVertices);
+}
+
+void swapBuffers(GLFWwindow* window, const Color& backgroundColor) {
+	GLenum glError = glGetError();
+	if (glError != 0) {
+		std::cout<<"glError: "<<glError<<"\n";
+	}
+
 	glfwSwapBuffers(window);
+	glfwPollEvents();
+
+	glClearColor(backgroundColor.r, backgroundColor.g, backgroundColor.b, backgroundColor.a);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // also clear the depth buffer now!
 }
 
 
@@ -227,30 +249,41 @@ void screenshot(int x, int y, unsigned int w, unsigned int h) {
 }
 
 
-void show(unsigned int width, unsigned int height, std::vector<float> vertices, float cameraInclination, float fov, float r, float g, float b) {
+void show(unsigned int width, unsigned int height,
+		float cameraInclination, float fovy, const Color& backgroundColor,
+		const std::vector<float>& vertices, const std::vector<float>& lineVertices) {
+	const float screenRatio = (float)width/height;
 	GLFWwindow* window = init(width, height);
 	if(window == NULL) return;
+	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 	int shader = compileShader("vertex_shader.glsl", "fragment_shader.glsl");
 	auto [vbo, vao] = genVboVao(shader, vertices, {{"pos", 3}, {"col", 4}});
 
+	int lineShader = compileShader("line_vertex_shader.glsl", "line_fragment_shader.glsl");
+	auto [lineVbo, lineVao] = genVboVao(lineShader, lineVertices, {{"pos", 2}, {"col", 4}});
+
+
+	draw(shader, vao, vertices.size(), screenRatio, cameraInclination, fovy);
+	swapBuffers(window, backgroundColor);
 	// draw twice to prevent buffer swap problems
-	draw(window, (float)width/height, shader, vao, vertices.size(),
-			cameraInclination, fov, r, g, b);
-	glfwPollEvents();
-	draw(window, (float)width/height, shader, vao, vertices.size(),
-			cameraInclination, fov, r, g, b);
+	draw(shader, vao, vertices.size(), screenRatio, cameraInclination, fovy);
 
 	screenshot(0, 0, width, height);
 
 
 	while (!glfwWindowShouldClose(window)) {
+		draw(shader, vao, vertices.size(), screenRatio, cameraInclination, fovy);
+		drawLines(window, lineShader, lineVao, lineVertices.size());
+
+		swapBuffers(window, backgroundColor);
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
-		glfwPollEvents();
 	}
 
 	glDeleteVertexArrays(1, &vao);
+	glDeleteVertexArrays(1, &lineVao);
 	glDeleteBuffers(1, &vbo);
+	glDeleteBuffers(1, &lineVbo);
 	glfwTerminate();
 }
 
@@ -274,20 +307,27 @@ float randomReal() {
 
 
 int main() {
+	constexpr int width = 1600;
+	constexpr int height = 900;
+	constexpr float cameraInclination = glm::radians(5.0f);
+	constexpr float fovy = glm::radians(41.41f); // pi camera v1
+	//constexpr float fovy = glm::radians(48.8f); // pi camera v2
+	constexpr Color backgroundColor{0.2f, 0.3f, 0.3f};
+
 	auto tratt = []() {
 		static int counter = 0;
 		++counter;
 
 		if ((counter/15)%7 < 4) {
-			return std::tuple{1.0f,1.0f,1.0f,1.0f};
+			return Color{1.0f,1.0f,1.0f};
 		} else {
-			return std::tuple{0.0f,0.0f,0.0f,0.0f};
+			return Color{0.0f,0.0f,0.0f,0.0f};
 		}
 	};
 
 	std::vector<float> streets = getAnnulus(-100, -1.501, 0, 95, 102, 1000, []() {
 		float grey = randomReal()/10;
-		return std::tuple{grey,grey,grey,1.0f};
+		return Color{grey,grey,grey};
 	});
 
 	std::vector<float> v0 = getAnnulus(-100, -1.5, 0,  95.4,  95.6, 1000, tratt);
@@ -296,5 +336,5 @@ int main() {
 
 	std::vector<float> vertices = merge({streets,v0,v1,v2});
 
-	show(1600, 900, vertices, 5.0f, 45.0f, 0.2f, 0.3f, 0.3f);
+	show(width, height, cameraInclination, fovy, backgroundColor, vertices, {});
 }
