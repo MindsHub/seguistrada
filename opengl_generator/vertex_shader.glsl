@@ -1,4 +1,3 @@
-// vertex shader: dati i vertici 3D ne determina la posizione sullo schermo 2D
 #version 330 core
 
 in vec3 pos;
