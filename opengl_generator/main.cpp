@@ -26,14 +26,13 @@ struct Color {
 };
 
 
-std::string getFileContent(std::string filename) {
-	std::ifstream file(filename);
-	return std::string(std::istreambuf_iterator<char>(file),
-		std::istreambuf_iterator<char>());
-}
-
-
 class Renderer {
+	private: static std::string getFileContent(std::string filename) {
+		std::ifstream file(filename);
+		return std::string(std::istreambuf_iterator<char>(file),
+			std::istreambuf_iterator<char>());
+	}
+
 	private: static void checkShader(int shader, const std::string& name) {
 		int success;
 		char infoLog[512];
@@ -178,18 +177,19 @@ class Renderer {
 	}
 
 
-	const unsigned int width, height;
-	const float screenRatio;
 	GLFWwindow* window;
-	Color backgroundColor;
-
 	unsigned int shader, lineShader;
 	unsigned int vbo, vao, lineVbo, lineVao;
+
+	const unsigned int width, height;
+	const float screenRatio;
+	Color backgroundColor;
 	size_t nrVertices, nrLineVertices;
 
 
 	public: Renderer(unsigned int w, unsigned int h)
-			: width{w}, height{h}, screenRatio{(float) w / h} {
+			: width{w}, height{h}, screenRatio{(float) w / h},
+				nrVertices{0}, nrLineVertices{0} {
 
 		window = getWindow();
 		shader = compileShader("vertex_shader.glsl", "fragment_shader.glsl");
@@ -232,14 +232,14 @@ class Renderer {
 		glUniformMatrix4fv(projectionUniformLocation, 1, GL_FALSE, &projection[0][0]);
 	}
 
-	public: void setVertices(const std::vector<float>& vertices) {
+	public: void loadVertices(const std::vector<float>& vertices) {
 		glBindVertexArray(vao);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STREAM_DRAW);
 		nrVertices = vertices.size();
 	}
 
-	public: void setLineVertices(const std::vector<float>& vertices) {
+	public: void loadLineVertices(const std::vector<float>& vertices) {
 		glBindVertexArray(lineVao);
 		glBindBuffer(GL_ARRAY_BUFFER, lineVbo);
 		glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STREAM_DRAW);
@@ -268,7 +268,6 @@ class Renderer {
 		saveScreenshot(0, 0, width, height, filename);
 	}
 };
-
 
 
 std::vector<float> getAnnulus(float x0, float y0, float z0, float internalRadius, float externalRadius, int resolution,
@@ -342,6 +341,68 @@ float randomReal() {
 	return dist(engine);
 }
 
+constexpr Color white() { return {1.0f,1.0f,1.0f}; }
+constexpr Color grey() { return {0.05f,0.05f,0.05f}; }
+constexpr Color invisible() { return {0.0f,0.0f,0.0f,0.0f}; }
+
+Color alternatingWhite() {
+	static int counter = 0;
+	++counter;
+
+	if ((counter/15)%7 < 4) {
+		return white();
+	} else {
+		return invisible();
+	}
+}
+
+Color randomGrey() {
+	float grey = randomReal()/10;
+	return Color{grey,grey,grey};
+}
+
+
+std::vector<float> getForwardStreetToInfinity(float cameraInclination, float fovy, int width, int height) {
+	// To draw triangle representing street to infinity
+	auto [re,g,bl,a] = std::tuple{1.0f, 0.0f, 0.0f, 0.15f};
+	float r = 0.1f;
+	float h = r * (sin(cameraInclination) + cos(cameraInclination) * tan(fovy/2));
+	float b = r * (float)width/height * tan(fovy/2);
+
+	return {
+		b, -h, 0.0f, re,g,bl,a,
+		0, -h, 0.0f, re,g,bl,a,
+		b, -h, -10000.0f, re,g,bl,a,
+		-b, -h, 0.0f, re,g,bl,a,
+		0, -h, 0.0f, re,g,bl,a,
+		-b, -h, -10000.0f, re,g,bl,a,
+	};
+}
+
+std::vector<float> getStreet(double param, const std::function<Color()>& streetColor, const std::function<Color()>& lineColor) {
+	int paramSign = (param < 0 ? -1 : 1);
+	param = std::pow(std::min(std::max(std::abs(param), 0.01), 1.0), 2);
+	double d = 10 * tan(M_PI_2 - param * M_PI_2);
+
+	//std::cout<<"param="<<param<<" sign="<<paramSign<<" d="<<d<<"\n";
+
+	std::vector<float> streets, v0, v1, v2;
+	if (paramSign == -1) {
+		streets = getAnnulus(-d, -1.501, 0, d-5, d+2, 10000, streetColor);
+		v0 =      getAnnulus(-d, -1.5,   0, d-4.6, d-4.4, 10000, lineColor);
+		v1 =      getAnnulus(-d, -1.5,   0, d-1.6, d-1.4, 10000, lineColor);
+		v2 =      getAnnulus(-d, -1.5,   0, d+1.4, d+1.6, 10000, lineColor);
+
+	} else {
+		streets = getAnnulus(d, -1.501, 0, d+5.0, d-2.0, 10000, streetColor);
+		v0 =      getAnnulus(d, -1.5,   0, d+4.6, d+4.4, 10000, lineColor);
+		v1 =      getAnnulus(d, -1.5,   0, d+1.6, d+1.4, 10000, lineColor);
+		v2 =      getAnnulus(d, -1.5,   0, d-1.4, d-1.6, 10000, lineColor);
+	}
+
+	return merge({streets,v0,v1,v2});
+}
+
 
 int main() {
 	constexpr int width = 1600;
@@ -351,52 +412,17 @@ int main() {
 	//constexpr float fovy = glm::radians(48.8f); // pi camera v2
 	constexpr Color backgroundColor{0.2f, 0.3f, 0.3f};
 
-	/* To draw triangle representing street to infinity
-	auto [re,g,bl,a] = std::tuple{1.0f, 0.0f, 0.0f, 0.15f};
-	float r = 0.1f;
-	float h = r * (sin(cameraInclination) + cos(cameraInclination) * tan(fovy/2));
-	float b = r * (float)width/height * tan(fovy/2);
 
-	std::vector<float> forwardStreetToInfinity = {
-		b, -h, 0.0f, re,g,bl,a,
-		0, -h, 0.0f, re,g,bl,a,
-		b, -h, -10000.0f, re,g,bl,a,
-		-b, -h, 0.0f, re,g,bl,a,
-		0, -h, 0.0f, re,g,bl,a,
-		-b, -h, -10000.0f, re,g,bl,a,
-	};*/
-
-	auto tratt = []() {
-		static int counter = 0;
-		++counter;
-
-		if ((counter/15)%7 < 4) {
-			return Color{1.0f,1.0f,1.0f};
-		} else {
-			return Color{0.0f,0.0f,0.0f,0.0f};
-		}
-	};
-
-	std::vector<float> streets = getAnnulus(-100, -1.501, 0, 95, 102, 1000, []() {
-		float grey = randomReal()/10;
-		return Color{grey,grey,grey};
-	});
-
-	std::vector<float> v0 = getAnnulus(-100, -1.5, 0,  95.4,  95.6, 1000, tratt);
-	std::vector<float> v1 = getAnnulus(-100, -1.5, 0,  98.4,  98.6, 1000, tratt);
-	std::vector<float> v2 = getAnnulus(-100, -1.5, 0, 101.4, 101.6, 1000, tratt);
-
-	std::vector<float> vertices = merge({streets,v0,v1,v2});
 	std::vector<float> lineVertices = getProjLines((float)width/height, cameraInclination, fovy, {1.0, 0.0, 0.0});
-
 
 	Renderer renderer{width, height};
 	renderer.setCameraParams(cameraInclination, fovy);
 	renderer.setBackgroundColor(backgroundColor);
-	renderer.setVertices(vertices);
-	renderer.setLineVertices(lineVertices);
+	//renderer.loadLineVertices(lineVertices);
 
 	while(!renderer.shouldClose()) {
+		std::vector<float> street = getStreet(sin(glfwGetTime()/2)/2, grey, white);
+		renderer.loadVertices(street);
 		renderer.draw();
 	}
 }
