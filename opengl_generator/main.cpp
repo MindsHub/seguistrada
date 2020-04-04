@@ -33,117 +33,242 @@ std::string getFileContent(std::string filename) {
 }
 
 
-GLFWwindow* init(unsigned int w, unsigned int h) {
-	glfwInit();
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	#ifdef __APPLE__
-	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // fix compilation on OS X
-	#endif
+class Renderer {
+	private: static void checkShader(int shader, const std::string& name) {
+		int success;
+		char infoLog[512];
+		glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+		if (!success)
+		{
+			glGetShaderInfoLog(shader, 512, NULL, infoLog);
+			std::cout << name << " shader compilation failed:\n" << infoLog << "\n";
+		}
+	}
 
-	// glfw window creation
-	GLFWwindow* window = glfwCreateWindow(w, h, "LearnOpenGL", NULL, NULL);
-	if (window == NULL)
-	{
-		std::cout << "Failed to create GLFW window" << std::endl;
+	private: static void checkProgram(int program) {
+		int success;
+		char infoLog[512];
+		glGetProgramiv(program, GL_LINK_STATUS, &success);
+		if (!success) {
+			glGetProgramInfoLog(program, 512, NULL, infoLog);
+			std::cout << "program linking failed:\n" << infoLog << std::endl;
+		}
+	}
+
+	private: static int compileShader(const std::string& vertexFilename, const std::string& fragmentFilename) {
+		std::string vertexShaderSourceStr = getFileContent(vertexFilename);
+		std::string fragmentShaderSourceStr = getFileContent(fragmentFilename);
+		const char* vertexShaderSource = vertexShaderSourceStr.c_str();
+		const char* fragmentShaderSource = fragmentShaderSourceStr.c_str();
+
+		// compila vertex shader
+		int vertexShader = glCreateShader(GL_VERTEX_SHADER);
+		glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+		glCompileShader(vertexShader);
+		checkShader(vertexShader, "vertex");
+
+		// compila fragment shader
+		int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+		glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+		glCompileShader(fragmentShader);
+		checkShader(fragmentShader, "fragment");
+
+		// link shaders
+		int shaderProgram = glCreateProgram();
+		glAttachShader(shaderProgram, vertexShader);
+		glAttachShader(shaderProgram, fragmentShader);
+		glLinkProgram(shaderProgram);
+		checkProgram(shaderProgram);
+		glDeleteShader(vertexShader);
+		glDeleteShader(fragmentShader);
+
+		return shaderProgram;
+	}
+
+	private: static void genVboVao(
+			unsigned int shader,
+			const std::vector<std::pair<std::string, int>>& attribs,
+			unsigned int& vbo,
+			unsigned int& vao) {
+		glGenVertexArrays(1, &vao); // predisponimi un VAO e salva un identificatore in `vao_id`
+		glGenBuffers(1, &vbo); // predisponimi un VBO e salva un identificatore in `vbo_id`
+
+		glBindVertexArray(vao); // voglio usare il VAO all'id `vao_id`
+		glBindBuffer(GL_ARRAY_BUFFER, vbo); // voglio usare il VBO all'id `vbo_id`
+
+
+		int totalSize = 0;
+		for (auto&& attrib : attribs) {
+			totalSize += attrib.second;
+		}
+
+		int sizeSoFar = 0;
+		for (auto&& attrib : attribs) {
+			int location = glGetAttribLocation(shader, attrib.first.c_str());
+			glVertexAttribPointer(location, attrib.second, GL_FLOAT, GL_FALSE, totalSize * sizeof(float), (void*)(sizeSoFar * sizeof(float)));
+			glEnableVertexAttribArray(location);
+			sizeSoFar += attrib.second;
+		}
+	}
+
+
+	private: GLFWwindow* getWindow() {
+		glfwInit();
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+		#ifdef __APPLE__
+		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // fix compilation on OS X
+		#endif
+
+		// glfw window creation
+		GLFWwindow* window = glfwCreateWindow(width, height, "LearnOpenGL", nullptr, nullptr);
+		if (window == nullptr) {
+			throw std::runtime_error("Failed to create GLFW window");
+		}
+		glfwMakeContextCurrent(window);
+
+		// glad: load all OpenGL function pointers
+		if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+			throw std::runtime_error("Failed to initialize GLAD");
+		}
+
+		return window;
+	}
+
+	private: void swapBuffers() {
+		GLenum glError = glGetError();
+		if (glError != 0) {
+			std::cout<<"glError: "<<glError<<"\n";
+		}
+
+		glfwSwapBuffers(window);
+		glfwPollEvents();
+
+		glClearColor(backgroundColor.r, backgroundColor.g, backgroundColor.b, backgroundColor.a);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // also clear the depth buffer now!
+	}
+
+	private: void drawVertices() {
+		glEnable(GL_DEPTH_TEST);
+		glUseProgram(shader);
+		glBindVertexArray(vao);
+		glDrawArrays(GL_TRIANGLES, 0, nrVertices);
+	}
+
+	private: void drawLineVertices() {
+		glDisable(GL_DEPTH_TEST); // no depth testing!
+		glUseProgram(lineShader);
+		glBindVertexArray(lineVao);
+		glDrawArrays(GL_LINES, 0, nrLineVertices);
+	}
+
+	private: void saveScreenshot(int x, int y, unsigned int w, unsigned int h, const std::string& filename) {
+		std::vector<uint8_t> pixels(3 * w * h);
+		glReadPixels(x, y, w, h, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+
+		for(int line = 0; line != h/2; ++line) {
+			std::swap_ranges(	pixels.begin() + 3 * w * line,
+									pixels.begin() + 3 * w * (line+1),
+									pixels.begin() + 3 * w * (h-line-1));
+		}
+
+		std::ofstream screenshotFile{filename, std::ios::binary};
+		TinyPngOut{w, h, screenshotFile}.write(pixels.data(), w * h);
+	}
+
+
+	const unsigned int width, height;
+	const float screenRatio;
+	GLFWwindow* window;
+	Color backgroundColor;
+
+	unsigned int shader, lineShader;
+	unsigned int vbo, vao, lineVbo, lineVao;
+	size_t nrVertices, nrLineVertices;
+
+
+	public: Renderer(unsigned int w, unsigned int h)
+			: width{w}, height{h}, screenRatio{(float) w / h} {
+
+		window = getWindow();
+		shader = compileShader("vertex_shader.glsl", "fragment_shader.glsl");
+		lineShader = compileShader("line_vertex_shader.glsl", "line_fragment_shader.glsl");
+
+		genVboVao(shader, {{"pos", 3}, {"col", 4}}, vbo, vao);
+		genVboVao(shader, {{"pos", 2}, {"col", 4}}, lineVbo, lineVao);
+
+		//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		glEnable(GL_BLEND); // transparency
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	}
+
+	public: ~Renderer() {
+		glDeleteVertexArrays(1, &vao);
+		glDeleteVertexArrays(1, &lineVao);
+		glDeleteBuffers(1, &vbo);
+		glDeleteBuffers(1, &lineVbo);
 		glfwTerminate();
-		return NULL;
-	}
-	glfwMakeContextCurrent(window);
-
-	// glad: load all OpenGL function pointers
-	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-	{
-		std::cout << "Failed to initialize GLAD" << std::endl;
-		return NULL;
-	}
-
-	return window;
-}
-
-
-void checkShader(int shader, const std::string& name) {
-	int success;
-	char infoLog[512];
-	glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-	if (!success)
-	{
-		glGetShaderInfoLog(shader, 512, NULL, infoLog);
-		std::cout << name << " shader compilation failed:\n" << infoLog << "\n";
-	}
-}
-
-void checkProgram(int program) {
-	int success;
-	char infoLog[512];
-	glGetProgramiv(program, GL_LINK_STATUS, &success);
-	if (!success) {
-		glGetProgramInfoLog(program, 512, NULL, infoLog);
-		std::cout << "program linking failed:\n" << infoLog << std::endl;
-	}
-}
-
-int compileShader(const std::string& vertexFilename, const std::string& fragmentFilename) {
-	std::string vertexShaderSourceStr = getFileContent(vertexFilename);
-	std::string fragmentShaderSourceStr = getFileContent(fragmentFilename);
-	const char* vertexShaderSource = vertexShaderSourceStr.c_str();
-	const char* fragmentShaderSource = fragmentShaderSourceStr.c_str();
-
-	// compila vertex shader
-	int vertexShader = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-	glCompileShader(vertexShader);
-	checkShader(vertexShader, "vertex");
-
-	// compila fragment shader
-	int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-	glCompileShader(fragmentShader);
-	checkShader(fragmentShader, "fragment");
-
-	// link shaders
-	int shaderProgram = glCreateProgram();
-	glAttachShader(shaderProgram, vertexShader);
-	glAttachShader(shaderProgram, fragmentShader);
-	glLinkProgram(shaderProgram);
-	checkProgram(shaderProgram);
-	glDeleteShader(vertexShader);
-	glDeleteShader(fragmentShader);
-
-	return shaderProgram;
-}
-
-
-auto genVboVao(unsigned int shader, const std::vector<float>& vertices,
-		const std::vector<std::pair<std::string, int>>& attribs) {
-	unsigned int vbo_id, vao_id;
-	glGenVertexArrays(1, &vao_id); // predisponimi un VAO e salva un identificatore in `vao_id`
-	glGenBuffers(1, &vbo_id); // predisponimi un VBO e salva un identificatore in `vbo_id`
-
-	glBindVertexArray(vao_id); // voglio usare il VAO all'id `vao_id`
-	glBindBuffer(GL_ARRAY_BUFFER, vbo_id); // voglio usare il VBO all'id `vbo_id`
-	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW); // carica i dati usando il VBO attivo
-
-
-	int totalSize = 0;
-	for (auto&& attrib : attribs) {
-		totalSize += attrib.second;
-	}
-
-	int sizeSoFar = 0;
-	for (auto&& attrib : attribs) {
-		int location = glGetAttribLocation(shader, attrib.first.c_str());
-		glVertexAttribPointer(location, attrib.second, GL_FLOAT, GL_FALSE, totalSize * sizeof(float), (void*)(sizeSoFar * sizeof(float)));
-		glEnableVertexAttribArray(location);
-		sizeSoFar += attrib.second;
 	}
 
 
-	glBindBuffer(GL_ARRAY_BUFFER, 0); // non uso piu' il VBO
-	glBindVertexArray(0); // non uso piu' il VAO
-	return std::pair{vbo_id, vao_id};
-}
+	public: void setCameraParams(float cameraInclination, float fovy) {
+		float screenRatio = (float)width / (float)height;
+		int viewUniformLocation = glGetUniformLocation(shader, "view");
+		int projectionUniformLocation = glGetUniformLocation(shader, "projection");
+
+		glUseProgram(shader);
+		glBindVertexArray(vao);
+
+		// make sure to initialize matrix to identity matrix first
+		glm::mat4 view{1.0f};
+		//view = glm::translate(view, glm::vec3{0,0,0});
+		//view = glm::rotate(view, glm::radians(0.0f), glm::vec3{0,    1.0f, 0}); // yaw
+		view = glm::rotate(view, cameraInclination, glm::vec3{1.0f, 0,    0}); // pitch
+		glUniformMatrix4fv(viewUniformLocation, 1, GL_FALSE, &view[0][0]);
+
+		glm::mat4 projection = glm::mat4(1.0f);
+		projection = glm::perspective(fovy, screenRatio, 0.01f, 100.0f);
+		glUniformMatrix4fv(projectionUniformLocation, 1, GL_FALSE, &projection[0][0]);
+	}
+
+	public: void setVertices(const std::vector<float>& vertices) {
+		glBindVertexArray(vao);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STREAM_DRAW);
+		nrVertices = vertices.size();
+	}
+
+	public: void setLineVertices(const std::vector<float>& vertices) {
+		glBindVertexArray(lineVao);
+		glBindBuffer(GL_ARRAY_BUFFER, lineVbo);
+		glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STREAM_DRAW);
+		nrLineVertices = vertices.size();
+	}
+
+	public: void setBackgroundColor(const Color& color) {
+		backgroundColor = color;
+	}
+
+
+	public: void draw() {
+		drawVertices();
+		drawLineVertices();
+		swapBuffers();
+	}
+
+	public: bool shouldClose() {
+		return glfwWindowShouldClose(window);
+	}
+
+	public: void screenshot(const std::string& filename) {
+		drawVertices();
+		swapBuffers();
+		drawVertices();
+		saveScreenshot(0, 0, width, height, filename);
+	}
+};
+
 
 
 std::vector<float> getAnnulus(float x0, float y0, float z0, float internalRadius, float externalRadius, int resolution,
@@ -197,109 +322,6 @@ std::vector<float> getProjLines(float screenRatio, float cameraInclination, floa
 	};
 
 	return result;
-}
-
-
-void draw(int shader, int vao, int nrVertices, float screenRatio, float cameraInclination, float fovy) {
-	int viewUniformLocation = glGetUniformLocation(shader, "view");
-	int projectionUniformLocation = glGetUniformLocation(shader, "projection");
-
-	glEnable(GL_BLEND); // transparency
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glEnable(GL_DEPTH_TEST);
-
-	glUseProgram(shader);
-	glBindVertexArray(vao);
-
-	// make sure to initialize matrix to identity matrix first
-	glm::mat4 view{1.0f};
-	//view = glm::translate(view, glm::vec3{0,0,0});
-	//view = glm::rotate(view, glm::radians(0.0f), glm::vec3{0,    1.0f, 0}); // yaw
-	view = glm::rotate(view, cameraInclination, glm::vec3{1.0f, 0,    0}); // pitch
-	glUniformMatrix4fv(viewUniformLocation, 1, GL_FALSE, &view[0][0]);
-
-	glm::mat4 projection = glm::mat4(1.0f);
-	projection = glm::perspective(fovy, screenRatio, 0.01f, 100.0f);
-	glUniformMatrix4fv(projectionUniformLocation, 1, GL_FALSE, &projection[0][0]);
-
-	glDrawArrays(GL_TRIANGLES, 0, nrVertices);
-}
-
-void drawLines(GLFWwindow* window, int shader, int vao, int nrVertices) {
-	glEnable(GL_BLEND); // transparency
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glDisable(GL_DEPTH_TEST); // no depth testing (!)
-
-	glUseProgram(shader);
-	glBindVertexArray(vao);
-	glDrawArrays(GL_LINES, 0, nrVertices);
-}
-
-void swapBuffers(GLFWwindow* window, const Color& backgroundColor) {
-	GLenum glError = glGetError();
-	if (glError != 0) {
-		std::cout<<"glError: "<<glError<<"\n";
-	}
-
-	glfwSwapBuffers(window);
-	glfwPollEvents();
-
-	glClearColor(backgroundColor.r, backgroundColor.g, backgroundColor.b, backgroundColor.a);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // also clear the depth buffer now!
-}
-
-
-void screenshot(int x, int y, unsigned int w, unsigned int h) {
-	std::vector<uint8_t> pixels(3 * w * h);
-	glReadPixels(x, y, w, h, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
-
-	for(int line = 0; line != h/2; ++line) {
-		std::swap_ranges(	pixels.begin() + 3 * w * line,
-								pixels.begin() + 3 * w * (line+1),
-								pixels.begin() + 3 * w * (h-line-1));
-	}
-
-	std::ofstream screenshotFile{"screenshot.png", std::ios::binary};
-	TinyPngOut{w, h, screenshotFile}.write(pixels.data(), w * h);
-}
-
-
-void show(unsigned int width, unsigned int height,
-		float cameraInclination, float fovy, const Color& backgroundColor,
-		const std::vector<float>& vertices, const std::vector<float>& lineVertices) {
-	const float screenRatio = (float)width/height;
-	GLFWwindow* window = init(width, height);
-	if(window == NULL) return;
-	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
-	int shader = compileShader("vertex_shader.glsl", "fragment_shader.glsl");
-	auto [vbo, vao] = genVboVao(shader, vertices, {{"pos", 3}, {"col", 4}});
-
-	int lineShader = compileShader("line_vertex_shader.glsl", "line_fragment_shader.glsl");
-	auto [lineVbo, lineVao] = genVboVao(lineShader, lineVertices, {{"pos", 2}, {"col", 4}});
-
-
-	draw(shader, vao, vertices.size(), screenRatio, cameraInclination, fovy);
-	swapBuffers(window, backgroundColor);
-	// draw twice to prevent buffer swap problems
-	draw(shader, vao, vertices.size(), screenRatio, cameraInclination, fovy);
-
-	screenshot(0, 0, width, height);
-
-
-	while (!glfwWindowShouldClose(window)) {
-		draw(shader, vao, vertices.size(), screenRatio, cameraInclination, fovy);
-		drawLines(window, lineShader, lineVao, lineVertices.size());
-
-		swapBuffers(window, backgroundColor);
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
-	}
-
-	glDeleteVertexArrays(1, &vao);
-	glDeleteVertexArrays(1, &lineVao);
-	glDeleteBuffers(1, &vbo);
-	glDeleteBuffers(1, &lineVbo);
-	glfwTerminate();
 }
 
 
@@ -367,5 +389,14 @@ int main() {
 	std::vector<float> vertices = merge({streets,v0,v1,v2});
 	std::vector<float> lineVertices = getProjLines((float)width/height, cameraInclination, fovy, {1.0, 0.0, 0.0});
 
-	show(width, height, cameraInclination, fovy, backgroundColor, vertices, lineVertices);
+
+	Renderer renderer{width, height};
+	renderer.setCameraParams(cameraInclination, fovy);
+	renderer.setBackgroundColor(backgroundColor);
+	renderer.setVertices(vertices);
+	renderer.setLineVertices(lineVertices);
+
+	while(!renderer.shouldClose()) {
+		renderer.draw();
+	}
 }
