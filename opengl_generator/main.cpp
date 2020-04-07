@@ -311,7 +311,7 @@ std::vector<float> getAnnulus(float x0, float y0, float z0, float internalRadius
 std::vector<float> getProjLines(float screenRatio, float cameraInclination, float fovy, const Color& color) {
 	auto [r,g,b,a] = color;
 	float tanLineAngle = (tan(cameraInclination) / tan(fovy/2) + 1) / screenRatio;
-	std::cout<<"Tan line angle = "<<tanLineAngle<<"  -->  line angle = "<<atan(tanLineAngle)<<"\n";
+	std::cout<<"Tan line angle = "<<tanLineAngle<<"  -->  line angle = "<<atan(tanLineAngle)<<" rad = "<<glm::degrees(atan(tanLineAngle))<<" degrees\n";
 
 	std::vector<float> result{
 		-1,                                -1, r,g,b,a,
@@ -418,11 +418,17 @@ int main() {
 	Renderer renderer{width, height};
 	renderer.setCameraParams(cameraInclination, fovy);
 	renderer.setBackgroundColor(backgroundColor);
-	//renderer.loadLineVertices(lineVertices);
+	renderer.loadLineVertices(lineVertices);
+
+	std::vector<float> street = getStreet(0.3, grey, white);
+	renderer.loadVertices(street);
+	renderer.screenshot("../screenshot.png");
 
 	while(!renderer.shouldClose()) {
 		std::vector<float> street = getStreet(sin(glfwGetTime()/2)/2, grey, white);
 		renderer.loadVertices(street);
+		renderer.screenshot("../screenshot.png");
 		renderer.draw();
+		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 	}
 }
