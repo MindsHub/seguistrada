@@ -93,12 +93,14 @@ def maxDifference(arr):
 		diff = max(diff, arr[i]-arr[i+1] if arr[i]>arr[i+1] else arr[i+1]-arr[i])
 	return diff
 
+def circularColumnAverage(rect, radius):
+	return columnAverage(circularShift(rect, radius))
 
 
-def processImage(frame, img, x0, baseWidth):
-	corn, rect = getStreetRect(frame, math.radians(5.0), math.radians(41.41), x0, baseWidth)
+def processImage(src, x0, baseWidth):
+	corn, rect = getStreetRect(src, math.radians(5.0), math.radians(41.41), x0, baseWidth)
 
-	cv2.imshow("rect", rect)
+	#cv2.imshow("rect", rect)
 	#cv2.imshow("frame", frame)
 
 	#print(corn)
@@ -114,10 +116,8 @@ def processImage(frame, img, x0, baseWidth):
 	bestShift = None
 	bestAverage = None
 	for radiusScale in radiuses:
-		radius = int(radiusScale*baseWidth)
-		shifted = circularShift(rect, radius)
-		average = columnAverage(shifted)
-		diff, highlight = maxDifferenceHighlight(average)
+		average = circularColumnAverage(rect, int(radiusScale*baseWidth))
+		diff = maxDifference(average)
 
 		if (diff > bestDiff) or (diff == bestDiff and abs(radius) > abs(bestRadius)):
 			bestDiff = diff
@@ -128,9 +128,6 @@ def processImage(frame, img, x0, baseWidth):
 	cv2.imshow("bestShift", bestShift.astype(np.uint8))
 	cv2.imshow("bestAverage", arrToImg(bestAverage))
 	print(bestRadius)
-	return rect
-
-
 
 def maxDifferenceHighlight(arr):
 	diff = -1
@@ -166,7 +163,7 @@ def main():
 			img = np.copy(frame)
 			if i%4 == 0:
 				start = time.time()
-				rect = processImage(frame, img, 0.3205, 50)
+				processImage(frame, img, 0.3205, 50)
 				end = time.time()
 				print(end - start, "s")
 			i+=1
