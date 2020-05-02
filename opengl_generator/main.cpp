@@ -19,6 +19,8 @@ g++ -std=c++17 -O3 -Iglad/include -ITinyPngOut/include main.cpp glad/src/glad.c 
 #include <chrono>
 #include <thread>
 #include <random>
+#include <iomanip>
+#include <filesystem>
 
 
 struct Color {
@@ -379,38 +381,40 @@ std::vector<float> getForwardStreetToInfinity(float cameraInclination, float fov
 	};
 }
 
-std::vector<float> getStreet(double param, const std::function<Color()>& streetColor, const std::function<Color()>& lineColor) {
+// returns the direction of the street (-1 for left, 1 for right), the diameter of the street in millimeters, and the vertices
+auto getStreet(double param, float cameraHeight, const std::function<Color()>& streetColor, const std::function<Color()>& lineColor) {
 	int paramSign = (param < 0 ? -1 : 1);
 	param = std::pow(std::min(std::max(std::abs(param), 0.01), 1.0), 2);
 	double d = 10 * tan(M_PI_2 - param * M_PI_2);
 
-	//std::cout<<"param="<<param<<" sign="<<paramSign<<" d="<<d<<"\n";
-
 	std::vector<float> streets, v0, v1, v2;
 	if (paramSign == -1) {
-		streets = getAnnulus(-d, -1.501, 0, d-5, d+2, 10000, streetColor);
-		v0 =      getAnnulus(-d, -1.5,   0, d-4.6, d-4.4, 10000, lineColor);
-		v1 =      getAnnulus(-d, -1.5,   0, d-1.6, d-1.4, 10000, lineColor);
-		v2 =      getAnnulus(-d, -1.5,   0, d+1.4, d+1.6, 10000, lineColor);
+		streets = getAnnulus(-d,     -cameraHeight, 0, d-5.0, d+2.0, 10000, streetColor);
+		v0 =      getAnnulus(-d, .002-cameraHeight, 0, d-4.6, d-4.4, 10000, lineColor);
+		v1 =      getAnnulus(-d, .002-cameraHeight, 0, d-1.6, d-1.4, 10000, lineColor);
+		v2 =      getAnnulus(-d, .002-cameraHeight, 0, d+1.4, d+1.6, 10000, lineColor);
 
 	} else {
-		streets = getAnnulus(d, -1.501, 0, d+5.0, d-2.0, 10000, streetColor);
-		v0 =      getAnnulus(d, -1.5,   0, d+4.6, d+4.4, 10000, lineColor);
-		v1 =      getAnnulus(d, -1.5,   0, d+1.6, d+1.4, 10000, lineColor);
-		v2 =      getAnnulus(d, -1.5,   0, d-1.4, d-1.6, 10000, lineColor);
+		streets = getAnnulus(d,     -cameraHeight, 0, d+5.0, d-2.0, 10000, streetColor);
+		v0 =      getAnnulus(d, .002-cameraHeight, 0, d+4.6, d+4.4, 10000, lineColor);
+		v1 =      getAnnulus(d, .002-cameraHeight, 0, d+1.6, d+1.4, 10000, lineColor);
+		v2 =      getAnnulus(d, .002-cameraHeight, 0, d-1.4, d-1.6, 10000, lineColor);
 	}
 
-	return merge({streets,v0,v1,v2});
+	return std::tuple{paramSign, (int)(d*1000), merge({streets,v0,v1,v2})};
 }
 
 
-int main() {
+int main(int argc, char const* argv[]) {
 	constexpr int width = 1600;
 	constexpr int height = 900;
+	constexpr float cameraHeight = 1.5; // meters
 	constexpr float cameraInclination = glm::radians(5.0f);
-	constexpr float fovy = glm::radians(41.41f); // pi camera v1
-	//constexpr float fovy = glm::radians(48.8f); // pi camera v2
+	constexpr float fovx = glm::radians(53.5f); // pi camera v1
+	//constexpr float fovx = glm::radians(62.2f); // pi camera v2
 	constexpr Color backgroundColor{0.2f, 0.3f, 0.3f};
+	float fovy = 2 * atan(tan(fovx/2) / width * height);
+	std::cout<<"Fovy: "<<fovy<<"\n";
 
 
 	std::vector<float> lineVertices = getProjLines((float)width/height, cameraInclination, fovy, {1.0, 0.0, 0.0});
@@ -420,15 +424,19 @@ int main() {
 	renderer.setBackgroundColor(backgroundColor);
 	renderer.loadLineVertices(lineVertices);
 
-	std::vector<float> street = getStreet(0.3, grey, white);
-	renderer.loadVertices(street);
-	renderer.screenshot("../screenshot.png");
-
+	std::filesystem::create_directories(argv[1]);
 	while(!renderer.shouldClose()) {
-		std::vector<float> street = getStreet(sin(glfwGetTime()/2)/2, grey, white);
+		auto [sign, d, street] = getStreet(sin(glfwGetTime()/20)/2, cameraHeight, grey, white);
 		renderer.loadVertices(street);
-		renderer.screenshot("../screenshot.png");
-		renderer.draw();
-		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+		std::stringstream filename{};
+		filename << argv[1] << "/" << (sign == -1 ? "-" : "") << std::setfill('0') << std::setw(9) << d << ".png";
+		renderer.screenshot(filename.str());
+
+		if (glfwGetTime()/20 > (2*M_PI)) {
+			break;
+		}
+		//renderer.draw();
+		//std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 	}
 }
