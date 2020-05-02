@@ -1,7 +1,9 @@
-import cv2
-import numpy as np
 import math
 import time
+import json
+import types
+import cv2
+import numpy as np
 
 
 def getTargetHeight(targetWidth, cameraInclination, fovy, yOnScreen):
@@ -21,7 +23,7 @@ def warpImage(image, corners, targetWidth, targetHeight):
 	out = cv2.warpPerspective(image, mat, (targetWidth, targetHeight))
 	return out
 
-def getStreetRect(img, cameraInclination, fovy, x0, targetWidth):
+def getStreetRect(img, cameraInclination, fovy, upperRectLineHeight, targetWidth):
 	height, width, _ = np.shape(img)
 	screenRatio = width / height
 	#print(screenRatio)
@@ -35,10 +37,10 @@ def getStreetRect(img, cameraInclination, fovy, x0, targetWidth):
 		return y / tanLineAngle
 
 	x, y = None, None
-	if f(x0) > 1/screenRatio:
+	if f(upperRectLineHeight) > 1/screenRatio:
 		x, y = fInverse(1/screenRatio), 1/screenRatio
 	else:
-		x, y = x0, f(x0)
+		x, y = upperRectLineHeight, f(upperRectLineHeight)
 
 	corners = [[x*width, height - y*width], [(1-x)*width, height - y*width], [width, height], [0,height]]
 
@@ -97,8 +99,9 @@ def circularColumnAverage(rect, radius):
 	return columnAverage(circularShift(rect, radius))
 
 
-def processImage(src, x0, baseWidth):
-	corn, rect = getStreetRect(src, math.radians(5.0), math.radians(41.41), x0, baseWidth)
+def processImage(src, p):
+	corn, rect = getStreetRect(src, p.cameraInclination,
+		p.fovy, p.upperRectLineHeight, p.profileWidth)
 
 	#cv2.imshow("rect", rect)
 	#cv2.imshow("frame", frame)
@@ -116,7 +119,9 @@ def processImage(src, x0, baseWidth):
 	bestShift = None
 	bestAverage = None
 	for radiusScale in radiuses:
-		average = circularColumnAverage(rect, int(radiusScale*baseWidth))
+		radius = int(radiusScale*p.profileWidth)
+		shifted = circularShift(rect, radius)
+		average = columnAverage(shifted)
 		diff = maxDifference(average)
 
 		if (diff > bestDiff) or (diff == bestDiff and abs(radius) > abs(bestRadius)):
@@ -129,14 +134,22 @@ def processImage(src, x0, baseWidth):
 	cv2.imshow("bestAverage", arrToImg(bestAverage))
 	print(bestRadius)
 
-def maxDifferenceHighlight(arr):
-	diff = -1
-	for i in range(len(arr)-1):
-		dif = arr[i]-arr[i+1] if arr[i]>arr[i+1] else arr[i+1]-arr[i]
-		if dif > diff:
-			diff = dif
-			highlight = i
-	return diff,highlight
+def getParams():
+	res = types.SimpleNamespace()
+	data = json.load(open("./params.json"))
+
+	res.width = data["width"]
+	res.height = data["height"]
+	res.cameraInclination = math.radians(data["cameraInclination"])
+	res.cameraHeight = data["cameraHeight"]
+	res.upperRectLineHeight = data["upperRectLineHeight"]
+	res.profileWidth = data["profileWidth"]
+	res.videoPath = data["videoPath"]
+	res.datasetPath = data["datasetPath"]
+
+	res.fovx = math.radians(data["fovx"])
+	res.fovy = 2 * math.atan(math.tan(res.fovx/2) / res.width * res.height)
+	return res
 
 def arrToImg(a, highlight=None):
 	width = np.shape(a)[0]
@@ -149,21 +162,20 @@ def arrToImg(a, highlight=None):
 	return res
 
 def main():
-	i=0
+	p = getParams()
 
-	cap = cv2.VideoCapture("2020-04-04 20-18-40.mp4")
+	cap = cv2.VideoCapture(p.videoPath)
 	while not cap.isOpened():
-		cap = cv2.VideoCapture("2020-04-04 20-18-40.mp4")
+		cap = cv2.VideoCapture(p.videoPath)
 		cv2.waitKey(1000)
 
-	done = False
+	i=0
 	while True:
 		flag, frame = cap.read()
 		if flag:
-			img = np.copy(frame)
 			if i%4 == 0:
 				start = time.time()
-				processImage(frame, img, 0.3205, 50)
+				processImage(frame, p)
 				end = time.time()
 				print(end - start, "s")
 			i+=1

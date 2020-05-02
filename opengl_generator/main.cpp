@@ -1,5 +1,5 @@
 /*
-g++ -std=c++17 -O3 -Iglad/include -ITinyPngOut/include main.cpp glad/src/glad.c TinyPngOut/src/TinyPngOut.cpp -lSOIL -lstdc++fs -lGL -lGLU -lglfw3 -lX11 -lXxf86vm -lXrandr -lpthread -lXi -ldl -lXinerama -lXcursor && ./a.out
+g++ -std=c++17 -O3 -Iglad/include -ITinyPngOut/include -Inlohmannjson/include main.cpp glad/src/glad.c TinyPngOut/src/TinyPngOut.cpp -lSOIL -lstdc++fs -lGL -lGLU -lglfw3 -lX11 -lXxf86vm -lXrandr -lpthread -lXi -ldl -lXinerama -lXcursor && ./a.out
 */
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -9,6 +9,8 @@ g++ -std=c++17 -O3 -Iglad/include -ITinyPngOut/include main.cpp glad/src/glad.c 
 #include <glm/gtc/type_ptr.hpp>
 
 #include <TinyPngOut.hpp>
+#include <nlohmann/json.hpp>
+using namespace nlohmann;
 
 #include <iostream>
 #include <string>
@@ -28,13 +30,13 @@ struct Color {
 };
 
 
-class Renderer {
-	private: static std::string getFileContent(std::string filename) {
-		std::ifstream file(filename);
-		return std::string(std::istreambuf_iterator<char>(file),
-			std::istreambuf_iterator<char>());
-	}
+std::string getFileContent(std::string filename) {
+	std::ifstream file(filename);
+	return std::string(std::istreambuf_iterator<char>(file),
+		std::istreambuf_iterator<char>());
+}
 
+class Renderer {
 	private: static void checkShader(int shader, const std::string& name) {
 		int success;
 		char infoLog[512];
@@ -406,14 +408,17 @@ auto getStreet(double param, float cameraHeight, const std::function<Color()>& s
 
 
 int main(int argc, char const* argv[]) {
-	constexpr int width = 1600;
-	constexpr int height = 900;
-	constexpr float cameraHeight = 1.5; // meters
-	constexpr float cameraInclination = glm::radians(5.0f);
-	constexpr float fovx = glm::radians(53.5f); // pi camera v1
-	//constexpr float fovx = glm::radians(62.2f); // pi camera v2
-	constexpr Color backgroundColor{0.2f, 0.3f, 0.3f};
+	auto params = json::parse(getFileContent("../params.json"));
+
+	int width = params["width"];
+	int height = params["height"];
+	float cameraHeight = params["cameraHeight"]; // meters
+	float cameraInclination = glm::radians((float) params["cameraInclination"]);
+	std::string datasetPath = params["datasetPath"];
+
+	float fovx = glm::radians((float) params["fovx"]);
 	float fovy = 2 * atan(tan(fovx/2) / width * height);
+	constexpr Color backgroundColor{0.2f, 0.3f, 0.3f};
 	std::cout<<"Fovy: "<<fovy<<"\n";
 
 
@@ -424,13 +429,13 @@ int main(int argc, char const* argv[]) {
 	renderer.setBackgroundColor(backgroundColor);
 	renderer.loadLineVertices(lineVertices);
 
-	std::filesystem::create_directories(argv[1]);
+	std::filesystem::create_directories(datasetPath);
 	while(!renderer.shouldClose()) {
 		auto [sign, d, street] = getStreet(sin(glfwGetTime()/20)/2, cameraHeight, grey, white);
 		renderer.loadVertices(street);
 
 		std::stringstream filename{};
-		filename << argv[1] << "/" << (sign == -1 ? "-" : "") << std::setfill('0') << std::setw(9) << d << ".png";
+		filename << datasetPath << "/" << (sign == -1 ? "-" : "") << std::setfill('0') << std::setw(9) << d << ".png";
 		renderer.screenshot(filename.str());
 
 		if (glfwGetTime()/20 > (2*M_PI)) {
