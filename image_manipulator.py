@@ -48,23 +48,25 @@ def getStreetRect(img, cameraInclination, fovy, upperRectLineHeight, targetWidth
 	return corners, warpImage(img, corners, targetWidth, targetHeight)
 
 
+integerInfinity = 1<<31 - 1 # max value for 32bit signed ints (needed in numpy)
+
 def getRoadRadiuses(count, multiplier):
-	"""returns (2*count+1) radiuses"""
-	res = [inf]
+	"""returns 2*count radiuses"""
+	res = []
 	for i in range(count):
-		res.append(multiplier * count / (i+1))
-		res.append(-res[-1])
+		radius = int(multiplier * count / (i+1))
+		if radius > integerInfinity:
+			radius = integerInfinity
+
+		res.append(radius)
+		res.append(-radius)
 	return res
 
-def radiusesToInt(radiuses):
+def radiusesExtended(radiuses):
+	"""yields all radiuses and also infinity"""
+	yield integerInfinity
 	for radius in radiuses:
-		if radius == inf:
-			yield radiusesToInt.maxInt32bit
-		elif radius < 0:
-			yield max(int(radius), -radiusesToInt.maxInt32bit)
-		else:
-			yield min(int(radius), radiusesToInt.maxInt32bit)
-radiusesToInt.maxInt32bit = 1<<31 - 1
+		yield radius
 
 
 def circularShift(src, r):
@@ -135,7 +137,7 @@ def processImage(src, p):
 	bestRadius = None
 	bestShift = None
 	bestAverage = None
-	for radius in radiusesToInt(processImage.radiuses):
+	for radius in radiusesExtended(processImage.radiuses):
 		shifted = circularShift(rect, radius)
 		average = columnAverage(shifted)
 		diff = maxDifference(average)
