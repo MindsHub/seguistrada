@@ -1,4 +1,4 @@
-from math import tan, atan, sin, pi, inf, radians
+from math import tan, atan, sin, pi, radians
 import time
 import json
 import types

@@ -2,10 +2,8 @@
 import os
 import random
 from math import tan, cos, pi, inf
-import tensorflow as tf
 from tensorflow import keras
 import numpy as np
-import matplotlib.pyplot as plt
 import cv2
 import image_manipulator as im
 
@@ -45,15 +43,36 @@ def getTrainingSamples(p):
 					bestDelta = delta
 					bestIndex = i
 
+		otherIndex = random.randint(-1, 200)
+		otherIndex = None if otherIndex == -1 else otherIndex
 		for i, radius in im.enumerateRadiuses(radiuses):
-			profile = im.circularColumnAverage(rect, radius)
-			yield profile, 1.0 if i == bestIndex else 0.0
+			if i in [bestIndex, otherIndex]:
+				profile = im.circularColumnAverage(rect, radius)
+				yield profile, 1.0 if i == bestIndex else 0.0
+
+def collectAllTrainingData(p):
+	profiles = []
+	scores = []
+	for profile, score in getTrainingSamples(p):
+		profiles.append(profile[:50]) # TODO remove [:50]
+		scores.append(score)
+	return np.array(profiles), np.array(scores)
+
 
 def main():
 	p = im.getParams()
-	for profile, score in getTrainingSamples(p):
-		pass
 
+	model = keras.Sequential([
+		keras.layers.Dense(50, input_shape=(p.profileWidth,)),
+		keras.layers.Dense(1, activation="sigmoid"),
+	])
+
+	model.compile(optimizer='adam',
+		loss='binary_crossentropy',
+		metrics=['accuracy'])
+
+	profiles, scores = collectAllTrainingData(p)
+	model.fit(profiles, scores, epochs=10)
 
 if __name__ == "__main__":
 	main()
