@@ -48,7 +48,24 @@ def getStreetRect(img, cameraInclination, fovy, upperRectLineHeight, targetWidth
 	return corners, warpImage(img, corners, targetWidth, targetHeight)
 
 
-radiuses = [(1.6**(i/4)) for i in range(40)] + [-(1.6**(i/4)) for i in range(39,-1,-1)]
+def getRoadRadiuses(count, multiplier):
+	"""returns (2*count+1) radiuses"""
+	res = [math.inf]
+	for i in range(count):
+		res.append(multiplier * count / (i+1))
+		res.append(-res[-1])
+	return res
+
+def radiusesToInt(radiuses):
+	for radius in radiuses:
+		if radius == math.inf:
+			yield radiusesToInt.maxInt32bit
+		elif radius < 0:
+			yield max(int(radius), -radiusesToInt.maxInt32bit)
+		else:
+			yield min(int(radius), radiusesToInt.maxInt32bit)
+radiusesToInt.maxInt32bit = 1<<31 - 1
+
 
 def circularShift(src, r):
 	height, width, channels = np.shape(src)
@@ -118,8 +135,7 @@ def processImage(src, p):
 	bestRadius = None
 	bestShift = None
 	bestAverage = None
-	for radiusScale in radiuses:
-		radius = int(radiusScale*p.profileWidth)
+	for radius in radiusesToInt(processImage.radiuses):
 		shifted = circularShift(rect, radius)
 		average = columnAverage(shifted)
 		diff = maxDifference(average)
@@ -163,6 +179,7 @@ def arrToImg(a, highlight=None):
 
 def main():
 	p = getParams()
+	processImage.radiuses = getRoadRadiuses(40, 10 * p.profileWidth)
 
 	cap = cv2.VideoCapture(p.videoPath)
 	while not cap.isOpened():
