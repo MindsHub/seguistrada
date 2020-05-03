@@ -1,4 +1,4 @@
-import math
+from math import tan, atan, sin, pi, inf, radians
 import time
 import json
 import types
@@ -7,10 +7,10 @@ import numpy as np
 
 
 def getTargetHeight(targetWidth, cameraInclination, fovy, yOnScreen):
-	alpha1 = math.pi/2 - cameraInclination
-	alpha2 = math.pi/2 - math.atan(math.tan(fovy/2) * (1-2*yOnScreen))
-	#print(alpha1, alpha2, math.pi-alpha1-alpha2, width, yOnScreen)
-	return targetWidth * (math.sin(alpha2) / math.sin(math.pi-alpha1-alpha2) * yOnScreen)
+	alpha1 = pi/2 - cameraInclination
+	alpha2 = pi/2 - atan(tan(fovy/2) * (1-2*yOnScreen))
+	#print(alpha1, alpha2, pi-alpha1-alpha2, width, yOnScreen)
+	return targetWidth * (sin(alpha2) / sin(pi-alpha1-alpha2) * yOnScreen)
 
 def warpImage(image, corners, targetWidth, targetHeight):
 	corners = np.array(corners, dtype=np.float32)
@@ -28,8 +28,8 @@ def getStreetRect(img, cameraInclination, fovy, upperRectLineHeight, targetWidth
 	screenRatio = width / height
 	#print(screenRatio)
 
-	tanLineAngle = (math.tan(cameraInclination) / math.tan(fovy/2) + 1) / screenRatio
-	#print("Tan line angle =", tanLineAngle, " -->  line angle =", math.atan(tanLineAngle), "rad =", math.degrees(math.atan(tanLineAngle)), "degrees")
+	tanLineAngle = (tan(cameraInclination) / tan(fovy/2) + 1) / screenRatio
+	#print("Tan line angle =", tanLineAngle, " -->  line angle =", atan(tanLineAngle), "rad =", math.degrees(atan(tanLineAngle)), "degrees")
 
 	def f(x):
 		return tanLineAngle * x
@@ -50,7 +50,7 @@ def getStreetRect(img, cameraInclination, fovy, upperRectLineHeight, targetWidth
 
 def getRoadRadiuses(count, multiplier):
 	"""returns (2*count+1) radiuses"""
-	res = [math.inf]
+	res = [inf]
 	for i in range(count):
 		res.append(multiplier * count / (i+1))
 		res.append(-res[-1])
@@ -58,7 +58,7 @@ def getRoadRadiuses(count, multiplier):
 
 def radiusesToInt(radiuses):
 	for radius in radiuses:
-		if radius == math.inf:
+		if radius == inf:
 			yield radiusesToInt.maxInt32bit
 		elif radius < 0:
 			yield max(int(radius), -radiusesToInt.maxInt32bit)
@@ -156,15 +156,15 @@ def getParams():
 
 	res.width = data["width"]
 	res.height = data["height"]
-	res.cameraInclination = math.radians(data["cameraInclination"])
+	res.cameraInclination = radians(data["cameraInclination"])
 	res.cameraHeight = data["cameraHeight"]
 	res.upperRectLineHeight = data["upperRectLineHeight"]
 	res.profileWidth = data["profileWidth"]
 	res.videoPath = data["videoPath"]
 	res.datasetPath = data["datasetPath"]
 
-	res.fovx = math.radians(data["fovx"])
-	res.fovy = 2 * math.atan(math.tan(res.fovx/2) / res.width * res.height)
+	res.fovx = radians(data["fovx"])
+	res.fovy = 2 * atan(tan(res.fovx/2) / res.width * res.height)
 	return res
 
 def arrToImg(a, highlight=None):
