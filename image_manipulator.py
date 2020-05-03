@@ -51,27 +51,30 @@ def getStreetRect(img, cameraInclination, fovy, upperRectLineHeight, targetWidth
 integerInfinity = 1<<31 - 1 # max value for 32bit signed ints (needed in numpy)
 
 def getRoadRadiuses(count, multiplier):
-	"""returns 2*count radiuses"""
-	res = []
+	"""returns 2*count radiuses sorted from bigger to smaller"""
+	positives = []
+	negatives = []
 	for i in range(count):
 		radius = int(multiplier * count / (i+1))
 		if radius > integerInfinity:
 			radius = integerInfinity
+		elif radius < 2:
+			radius = 2
 
-		res.append(radius)
-		res.append(-radius)
-	return res
+		positives.append(radius)
+		negatives.append(-radius)
+	return positives + negatives[::-1]
 
-def radiusesExtended(radiuses):
-	"""yields all radiuses and also infinity"""
-	yield integerInfinity
-	for radius in radiuses:
+def enumerateRadiuses(radiuses):
+	"""yields all correspodingIndex,radiuses and also None,infinity"""
+	yield None, integerInfinity
+	for radius in enumerate(radiuses):
 		yield radius
 
 
 def circularShift(src, r):
 	height, width, channels = np.shape(src)
-	direction = -1 if r<0 else 1
+	direction = 1 if r<0 else -1
 	r = abs(r)
 
 	if r <= height:
@@ -96,17 +99,21 @@ def columnAverage(src):
 	for w in range(width):
 		average[w] = np.average(src[:,w,:], weights=(src[:,w,:]>=0))
 
-	# in lines where only <=4 pixels are valid, tha values can't be considered ok
+	return average
+
+def pruneColumnAverage(src, average, count):
+	"""in lines where only <=count pixels are valid, the values can't be considered ok"""
+	_, width, _ = np.shape(src)
 	for w in range(2*width//3, width):
 		countValid = np.sum(src[:,w,:]>=0)
-		if countValid <= 10:
+		if countValid <= count:
 			average[w] = average[w-1]
 	for w in range(width//3, -1, -1):
 		countValid = np.sum(src[:,w,:]>=0)
-		if countValid <= 10:
+		if countValid <= count:
 			average[w] = average[w+1]
-
 	return average
+
 
 def maxDifference(arr):
 	diff = -1
@@ -137,9 +144,10 @@ def processImage(src, p):
 	bestRadius = None
 	bestShift = None
 	bestAverage = None
-	for radius in radiusesExtended(processImage.radiuses):
+	for _, radius in enumerateRadiuses(processImage.radiuses):
 		shifted = circularShift(rect, radius)
 		average = columnAverage(shifted)
+		average = pruneColumnAverage(shifted, average, 10)
 		diff = maxDifference(average)
 
 		if (diff > bestDiff) or (diff == bestDiff and abs(radius) > abs(bestRadius)):
