@@ -54,7 +54,7 @@ def collectAllTrainingData(p):
 	profiles = []
 	scores = []
 	for profile, score in getTrainingSamples(p):
-		profiles.append(profile[:50]) # TODO remove [:50]
+		profiles.append(profile)
 		scores.append(score)
 	return np.array(profiles), np.array(scores)
 

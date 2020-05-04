@@ -1,4 +1,4 @@
-from math import tan, atan, sin, pi, radians
+from math import tan, atan, sin, pi, radians, sqrt
 import time
 import json
 import types
@@ -77,18 +77,24 @@ def circularShift(src, r):
 	direction = 1 if r<0 else -1
 	r = abs(r)
 
-	if r <= height:
-		newWidth = width + r
+	if r <= width:
+		if r <= height:
+			newHeight = r
+		else:
+			newHeight = height
 	else:
-		newWidth = width + r - int(np.sqrt(r**2 - height**2)) - 1
-	newHeight = min(height, r)
+		if r <= height:
+			newHeight = int(sqrt(2*r*width - width*width))
+		else:
+			newHeight = min(height, int(sqrt(2*r*width - width*width)))
 
-	shifted = np.full((newHeight, newWidth, channels), -1, dtype=np.int16)
+	shifted = np.full((newHeight, width, channels), -1, dtype=np.int16)
 	for h in range(1, newHeight+1):
-		shift = int(r - np.sqrt(r**2 - h**2))
-		if direction == -1:
-			shift = newWidth-width-shift
-		shifted[newHeight-h,shift:shift+width,:] = src[height-h,:,:]
+		shift = int(r - sqrt(r*r - h*h))
+		if direction == 1:
+			shifted[newHeight-h, shift:width]   = src[newHeight-h, 0:width-shift]
+		else:
+			shifted[newHeight-h, 0:width-shift] = src[newHeight-h, shift:width]
 
 	return shifted
 
@@ -126,6 +132,7 @@ def circularColumnAverage(rect, radius):
 
 
 def processImage(src, p):
+	start = time.time()
 	corn, rect = getStreetRect(src, p.cameraInclination,
 		p.fovy, p.upperRectLineHeight, p.profileWidth)
 
@@ -156,6 +163,8 @@ def processImage(src, p):
 			bestShift = shifted
 			bestAverage = average
 
+	end = time.time()
+	print(end - start, "s")
 	cv2.imshow("bestShift", bestShift.astype(np.uint8))
 	cv2.imshow("bestAverage", arrToImg(bestAverage))
 	print(bestRadius)
@@ -189,7 +198,7 @@ def arrToImg(a, highlight=None):
 
 def main():
 	p = getParams()
-	processImage.radiuses = getRoadRadiuses(40, 10 * p.profileWidth)
+	processImage.radiuses = getRoadRadiuses(40, 10 * p.profileWidth) + [5,-5]
 
 	cap = cv2.VideoCapture(p.videoPath)
 	while not cap.isOpened():
@@ -201,10 +210,7 @@ def main():
 		flag, frame = cap.read()
 		if flag:
 			if i%4 == 0:
-				start = time.time()
 				processImage(frame, p)
-				end = time.time()
-				print(end - start, "s")
 			i+=1
 
 		if cv2.waitKey(1) == 27:
