@@ -69,25 +69,29 @@ def enumerateRadiuses(radiuses):
         yield radius
 
 
-def circularShift(src, r):
-    height, width, channels = np.shape(src)
+def circularShift(src, r, roadDistance):
     direction = 1 if r < 0 else -1
     r = abs(r)
+    if r <= roadDistance:
+        return None
 
+    height, width, channels = np.shape(src)
+    cumulativeHeight = height + roadDistance
     if r <= width:
-        if r <= height:
+        if r <= cumulativeHeight:
             newHeight = r
         else:
-            newHeight = height
+            newHeight = cumulativeHeight
     else:
-        if r <= height:
+        if r <= cumulativeHeight:
             newHeight = int(sqrt(2*r*width - width*width))
         else:
-            newHeight = min(height, int(sqrt(2*r*width - width*width)))
+            newHeight = min(cumulativeHeight, int(sqrt(2*r*width - width*width)))
+    newHeight -= roadDistance
 
     shifted = np.full((newHeight, width, channels), -1, dtype=np.int16)
     for h in range(1, newHeight+1):
-        shift = int(r - sqrt(r*r - h*h))
+        shift = int(r - sqrt(r*r - (h + roadDistance)**2))
         if direction == 1:
             shifted[newHeight-h, shift:width] = src[newHeight-h, 0:width-shift]
         else:
@@ -100,9 +104,10 @@ def columnAverage(src):
     average = np.zeros((width,), dtype=np.uint8)
 
     for w in range(width):
-        average[w] = np.average(src[:, w, :], weights=(src[:, w, :] >= 0))
+        average[w] = np.average(src[:, w, :], weights=((src[:, w, :] >= 0) + [1e-10]))
 
     return average
+
 
 def pruneColumnAverage(src, average, count):
     """in lines where only <=count pixels are valid, the values can't be considered ok"""
@@ -117,15 +122,11 @@ def pruneColumnAverage(src, average, count):
             average[w] = average[w+1]
     return average
 
-
 def maxDifference(arr):
     diff = -1
     for i in range(8, len(arr)-9):
         diff = max(diff, arr[i]-arr[i+1] if arr[i] > arr[i+1] else arr[i+1]-arr[i])
     return diff
-
-def circularColumnAverage(rect, radius):
-    return columnAverage(circularShift(rect, radius))
 
 
 def processImage(src, p):
@@ -150,7 +151,10 @@ def processImage(src, p):
     bestShift = None
     bestAverage = None
     for _, radius in enumerateRadiuses(processImage.radiuses):
-        shifted = circularShift(rect, radius)
+        shifted = circularShift(rect, radius, 49)
+        if shifted is None:
+            continue
+
         average = columnAverage(shifted)
         average = pruneColumnAverage(shifted, average, 10)
         diff = maxDifference(average)
@@ -196,7 +200,7 @@ def arrToImg(a, highlight=None):
 
 def main():
     p = getParams()
-    processImage.radiuses = getRoadRadiuses(40, 10 * p.profileWidth)
+    processImage.radiuses = getRoadRadiuses(40, 5 * p.profileWidth)
 
     cap = cv2.VideoCapture(p.videoPath)
     while not cap.isOpened():
@@ -207,7 +211,7 @@ def main():
     while True:
         flag, frame = cap.read()
         if flag:
-            if i%4 == 0:
+            if i%30 == 0:
                 processImage(frame, p)
             i += 1
 

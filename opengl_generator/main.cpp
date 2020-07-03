@@ -312,6 +312,18 @@ std::vector<float> getAnnulus(float x0, float y0, float z0, float internalRadius
 	return triangles;
 }
 
+std::vector<float> getLine(float x0, float y0, float z0, float x1, float y1, float z1, float thickness, const Color& color) {
+	auto [r, g, b, a] = color;
+	return {
+		x0 - thickness, y0 - thickness, z0 - thickness, r, g, b, a,
+		x0 + thickness, y0 + thickness, z0 + thickness, r, g, b, a,
+		x1 + thickness, y1 + thickness, z1 + thickness, r, g, b, a,
+		x1 + thickness, y1 + thickness, z1 + thickness, r, g, b, a,
+		x1 - thickness, y1 - thickness, z1 - thickness, r, g, b, a,
+		x0 - thickness, y0 - thickness, z0 - thickness, r, g, b, a,
+	};
+}
+
 std::vector<float> getProjLines(float screenRatio, float cameraInclination, float fovy, const Color& color) {
 	auto [r,g,b,a] = color;
 	float tanLineAngle = (tan(cameraInclination) / tan(fovy/2) + 1) / screenRatio;
@@ -406,6 +418,14 @@ auto getStreet(double param, float cameraHeight, const std::function<Color()>& s
 	return std::tuple{paramSign, (int)(d*1000), merge({streets,v0,v1,v2})};
 }
 
+std::vector<float> getDistLines(float length, float y, int count) {
+	std::vector<float> res;
+	for(int i = 0; i != count; ++i) {
+		res = merge({res, getLine(-length, y, -i, length, y, -i, 0.01, {i%2, i%4, i%8, .8})});
+	}
+	return res;
+}
+
 
 int main(int argc, char const* argv[]) {
 	auto params = json::parse(getFileContent("../params.json"));
@@ -427,21 +447,22 @@ int main(int argc, char const* argv[]) {
 	Renderer renderer{width, height};
 	renderer.setCameraParams(cameraInclination, fovy);
 	renderer.setBackgroundColor(backgroundColor);
-	renderer.loadLineVertices(lineVertices);
+	//renderer.loadLineVertices(lineVertices);
 
 	std::filesystem::create_directories(datasetPath);
 	while(!renderer.shouldClose()) {
-		auto [sign, d, street] = getStreet(sin(glfwGetTime()/20)/2, cameraHeight, grey, white);
-		renderer.loadVertices(street);
+		auto [sign, d, street] = getStreet(sin(glfwGetTime()/4)/1.5, cameraHeight, grey, white);
+		auto dist = getDistLines(2, .01-cameraHeight, 20);
+		renderer.loadVertices(merge({street, dist}));
 
-		std::stringstream filename{};
-		filename << datasetPath << "/" << (sign == -1 ? "-" : "") << std::setfill('0') << std::setw(9) << d << ".png";
-		renderer.screenshot(filename.str());
+		//std::stringstream filename{};
+		//filename << datasetPath << "/" << (sign == -1 ? "-" : "") << std::setfill('0') << std::setw(9) << d << ".png";
+		//renderer.screenshot(filename.str());
 
-		if (glfwGetTime()/20 > (2*M_PI)) {
-			break;
-		}
-		//renderer.draw();
-		//std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+		//if (glfwGetTime()/20 > (2*M_PI)) {
+		//	break;
+		//}
+
+		renderer.draw();
 	}
 }
